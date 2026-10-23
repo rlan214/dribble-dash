@@ -7,8 +7,8 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Dribble Dash">
 <meta name="theme-color" content="#07241b">
-<link rel="apple-touch-icon" href="icon.png">
-<link rel="icon" href="icon.png">
+<link rel="apple-touch-icon" href="icon.png?v=2">
+<link rel="icon" href="icon.png?v=2">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Graduate&family=Barlow+Condensed:wght@500;600;700;800&display=swap" rel="stylesheet">
@@ -64,8 +64,10 @@ main{flex:1;display:grid;gap:14px;padding-bottom:16px;grid-template-columns:1fr}
 }
 @media (orientation:portrait) and (min-width:700px){.stage{aspect-ratio:4/3}}
 @media (orientation:portrait) and (max-width:699px){.stage{aspect-ratio:3/4;max-height:58vh}}
-#view{width:100%;height:100%;object-fit:contain;display:block;background:#000}
-#cam{position:absolute;opacity:0;width:1px;height:1px;pointer-events:none}
+#cam{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000;pointer-events:none}
+#cam.mirror{transform:scaleX(-1)}
+#view{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:block;background:transparent;pointer-events:none}
+.flip{position:absolute;top:10px;right:10px;z-index:3;background:rgba(6,33,26,.8);border:1px solid var(--gold);color:var(--gold);border-radius:12px;padding:8px 12px;font-weight:800;font-size:16px;letter-spacing:1px}
 .overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:20px;gap:12px}
 #startOv{background:radial-gradient(circle at 50% 35%,#18624a,#06211a 75%)}
 #startOv h2{font-family:var(--jersey);font-size:clamp(26px,5vw,40px);color:var(--gold);-webkit-text-stroke:1px #fff}
@@ -179,8 +181,9 @@ video#replay{width:100%;max-height:60vh;border-radius:12px;background:#000}
 
 <main>
   <section class="stage">
-    <video id="cam" playsinline muted autoplay></video>
+    <video id="cam" class="mirror" playsinline muted autoplay></video>
     <canvas id="view"></canvas>
+    <button class="flip hidden" id="flipBtn">🔄 FLIP</button>
     <div class="calhint hidden" id="calHint">Fill the circle with one color of the ball… <span id="calNum">3</span></div>
     <div class="overlay" id="startOv">
       <svg width="86" height="86" aria-hidden="true"><use href="#gaMark"/></svg>
@@ -235,6 +238,9 @@ video#replay{width:100%;max-height:60vh;border-radius:12px;background:#000}
     <h3>Settings</h3>
     <div class="slbl">Player</div>
     <input class="txt" id="inName" maxlength="14" placeholder="Name">
+    <div class="slbl">Camera</div>
+    <div class="segc" id="camSeg"><button data-f="user">Front</button><button data-f="environment">Back</button></div>
+    <p class="hint">Back camera is sharper and smoother for fast dribbles, but she can't see the screen — the coach voice does the talking.</p>
     <div class="slbl">Ball tracking</div>
     <div class="segc" id="modeSeg"><button data-mode="ai">AI</button><button data-mode="color">Color</button></div>
     <p class="hint" id="modeHint"></p>
@@ -299,7 +305,7 @@ const store = {
 };
 const S = {
   mode:store.get('mode','ai'), sens:store.get('sens',5), calib:store.get('calib',null),
-  pose:store.get('pose',true), knee:store.get('knee',true), voice:store.get('voice',true), rec:store.get('rec',true), debug:store.get('debug',false),
+  pose:store.get('pose',true), knee:store.get('knee',true), voice:store.get('voice',true), rec:store.get('rec',true), debug:store.get('debug',false), facing:store.get('facing','user'),
   sel:store.get('sel','workout'), level:store.get('level','rookie'), name:store.get('name','Kryslana')
 };
 let pbs = store.get('pbs',{});
@@ -343,15 +349,47 @@ let wl=null; async function keepAwake(){ try{ wl=await navigator.wakeLock?.reque
 document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible'&&camOn) keepAwake(); });
 
 /* ---------------- camera + models ---------------- */
+let mirrored=true;
+async function openStream(){
+  try{ video.srcObject?.getTracks().forEach(t=>t.stop()); }catch{}
+  const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:S.facing},width:{ideal:1280},height:{ideal:720},frameRate:{ideal:60}},audio:false});
+  video.srcObject=s; await video.play();
+  const fm=s.getVideoTracks()[0]?.getSettings?.().facingMode;
+  mirrored = fm ? fm==='user' : S.facing==='user';
+  video.classList.toggle('mirror',mirrored);
+  bounce.reset(); prev=null; trail.length=0; body.at=0; body.base=0; greenHits=0;
+}
 async function startCamera(){
   ensureAudio();
   try{
-    const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:1280},height:{ideal:720},frameRate:{ideal:60}},audio:false});
-    video.srcObject=s; await video.play();
-    camOn=true; $('startOv').classList.add('hidden');
-    keepAwake(); loadModels(); requestAnimationFrame(loop);
+    await openStream();
+    if(!camOn){ camOn=true; requestAnimationFrame(loop); }
+    $('startOv').classList.add('hidden'); $('flipBtn').classList.remove('hidden');
+    keepAwake(); loadModels();
     if(S.mode==='color'&&!S.calib) later(()=>toast('Color mode: calibrate your ball in ⚙️ first'),700);
   }catch(e){ $('startMsg').textContent='Camera is blocked ('+e.name+'). Allow camera for this site in Settings › Safari › Camera, then reload.'; }
+}
+async function switchCamera(f){
+  if(busy()) return toast('Finish the round first');
+  S.facing=f; store.set('facing',f);
+  if(camOn){ try{ await openStream(); toast(f==='user'?'Front camera':'Back camera — listen for the coach!'); }catch(e){ toast('Could not switch camera'); } }
+  renderSettings();
+}
+// Safari sometimes hands back solid-green frames when the device is busy. Watch for it and recover.
+let greenHits=0, greenRestarts=0, restarting=false;
+function greenCheck(){
+  if(restarting||window.__noGreen) return;
+  sctx.drawImage(video,0,0,SW,SH);
+  const d=sctx.getImageData(0,0,SW,SH).data; let g=0,n=0;
+  for(let p=0;p<d.length;p+=4*7){ n++; if(d[p+1]>120&&d[p]<40&&d[p+2]<40) g++; }
+  if(g/n>.85){ greenHits++; } else greenHits=0;
+  if(greenHits>=3){ greenHits=0; recoverGreen(); }
+}
+async function recoverGreen(){
+  restarting=true; greenRestarts++;
+  try{ await openStream(); toast('Camera hiccup — restarted'); }catch{}
+  if(greenRestarts>=2 && !forceCPU){ forceCPU=true; ballDet=null; poseDet=null; loadModels(); toast('Switched AI to steady mode'); }
+  restarting=false;
 }
 async function getVision(){
   if(vision) return vision;
@@ -359,7 +397,9 @@ async function getVision(){
   vision=await FilesetResolver.forVisionTasks(MP+'/wasm');
   return vision;
 }
+let forceCPU=false;
 async function makeTask(Cls,opts){
+  if(forceCPU) return await Cls.createFromOptions(vision,{...opts,baseOptions:{...opts.baseOptions,delegate:'CPU'}});
   try{ return await Cls.createFromOptions(vision,{...opts,baseOptions:{...opts.baseOptions,delegate:'GPU'}}); }
   catch{ return await Cls.createFromOptions(vision,{...opts,baseOptions:{...opts.baseOptions,delegate:'CPU'}}); }
 }
@@ -507,6 +547,7 @@ function loop(now){
   if(vw&&vh){
     if(view.width!==vw||view.height!==vh){ view.width=vw; view.height=vh; SH=Math.max(40,Math.round(SW*vh/vw)); small.width=SW; small.height=SH; dbgC.width=SW; dbgC.height=SH; dbgImg=dctx.createImageData(SW,SH); }
     frameN++;
+    if(frameN%20===0) greenCheck();
     let obs=null;
     if(S.mode==='color') obs=colorTrack(); else if(ballDet) obs=aiTrack(now);
     if(poseDet && S.pose && poseAuto && (frameN%(fps<24?3:2)===0)) poseTrack(now);
@@ -517,6 +558,7 @@ function loop(now){
     stanceUpdate(now);
     perfGuard(now);
     draw(obs,vw,vh,now);
+    if(recorder&&recorder.state==='recording') compositeRec(vw,vh);
     status(obs,now);
   }
   tick(now);
@@ -529,13 +571,14 @@ function perfGuard(now){
 }
 
 /* ---------------- drawing (also what the replay records) ---------------- */
-const X=(x,vw)=>(1-x)*vw; // mirror
+const X=(x,vw)=>mirrored?(1-x)*vw:x*vw;
+// the live picture is Safari's own <video>; this canvas is a see-through overlay on top of it
 function draw(obs,vw,vh,now){
-  vctx.save(); vctx.translate(vw,0); vctx.scale(-1,1); vctx.drawImage(video,0,0,vw,vh); vctx.restore();
+  vctx.clearRect(0,0,vw,vh);
   const u=vh/100;
   if(S.debug&&S.mode==='color'&&S.calib&&dbgImg){
     const px=dbgImg.data; for(let i=0,p=0;i<mask.length;i++,p+=4){ if(mask[i]){ const c=labels[i]===chosen; px[p]=c?95:255; px[p+1]=c?240:40; px[p+2]=c?160:200; px[p+3]=150; } else px[p+3]=0; }
-    dctx.putImageData(dbgImg,0,0); vctx.save(); vctx.translate(vw,0); vctx.scale(-1,1); vctx.imageSmoothingEnabled=false; vctx.drawImage(dbgC,0,0,vw,vh); vctx.restore();
+    dctx.putImageData(dbgImg,0,0); vctx.save(); if(mirrored){ vctx.translate(vw,0); vctx.scale(-1,1); } vctx.imageSmoothingEnabled=false; vctx.drawImage(dbgC,0,0,vw,vh); vctx.restore();
   }
   // body guide lines
   if(bodyOK(now)){
@@ -543,7 +586,7 @@ function draw(obs,vw,vh,now){
     vctx.save(); vctx.setLineDash([u*1.4,u*1.1]); vctx.lineWidth=Math.max(2,u*.45);
     vctx.strokeStyle='rgba(95,240,160,.85)'; vctx.beginPath(); vctx.moveTo(x0,body.kneeY*vh); vctx.lineTo(x1,body.kneeY*vh); vctx.stroke();
     vctx.strokeStyle='rgba(246,198,35,.8)'; vctx.beginPath(); vctx.moveTo(x0,body.hipY*vh); vctx.lineTo(x1,body.hipY*vh); vctx.stroke();
-    vctx.setLineDash([]); vctx.font=`700 ${u*2.6}px 'Barlow Condensed',sans-serif`; vctx.fillStyle='rgba(95,240,160,.95)'; vctx.fillText('KNEES',x1+u,body.kneeY*vh+u); vctx.fillStyle='rgba(246,198,35,.95)'; vctx.fillText('WAIST',x1+u,body.hipY*vh+u);
+    vctx.setLineDash([]); vctx.font=`700 ${u*2.6}px 'Barlow Condensed',sans-serif`; vctx.fillStyle='rgba(95,240,160,.95)'; vctx.fillText('KNEES',Math.max(x0,x1)+u,body.kneeY*vh+u); vctx.fillStyle='rgba(246,198,35,.95)'; vctx.fillText('WAIST',Math.max(x0,x1)+u,body.hipY*vh+u);
     if(S.debug){ vctx.fillStyle='#fff'; for(const p of L){ if(p.v<.4) continue; vctx.beginPath(); vctx.arc(X(p.x,vw),p.y*vh,u*.6,0,7); vctx.fill(); } }
     vctx.restore();
   }
@@ -793,14 +836,20 @@ function goPressed(){ if(state==='idle'||state==='done') startRun(); else cancel
 function setGo(t,cls=''){ const b=$('goBtn'); b.textContent=t; b.className='go'+(cls?' '+cls:''); }
 
 /* ---------------- replay recording ---------------- */
+const recC=document.createElement('canvas'), rctx=recC.getContext('2d');
+function compositeRec(vw,vh){
+  if(recC.width!==vw||recC.height!==vh){ recC.width=vw; recC.height=vh; }
+  rctx.save(); if(mirrored){ rctx.translate(vw,0); rctx.scale(-1,1); } rctx.drawImage(video,0,0,vw,vh); rctx.restore(); rctx.drawImage(view,0,0);
+}
 function startRecorder(){
   if(recURL){ URL.revokeObjectURL(recURL); recURL=null; }
   recorder=null; recChunks=[];
-  if(!S.rec||!view.captureStream||!window.MediaRecorder) return;
+  if(!S.rec||!recC.captureStream||!window.MediaRecorder) return;
+  if(video.videoWidth){ recC.width=video.videoWidth; recC.height=video.videoHeight; compositeRec(recC.width,recC.height); }
   const types=['video/mp4;codecs=avc1','video/mp4','video/webm;codecs=vp9','video/webm'];
   recType=types.find(t=>{ try{ return MediaRecorder.isTypeSupported(t); }catch{ return false; } })||'';
   try{
-    const stream=view.captureStream(30);
+    const stream=recC.captureStream(30);
     recorder=new MediaRecorder(stream,{...(recType?{mimeType:recType}:{}),videoBitsPerSecond:2_500_000});
     recorder.ondataavailable=e=>{ if(e.data&&e.data.size) recChunks.push(e.data); };
     recorder.onstop=()=>{ if(recorder?._discard||!recChunks.length) return; const blob=new Blob(recChunks,{type:recType||recChunks[0].type}); recURL=URL.createObjectURL(blob); recorder._blob=blob; $('replayBtn').classList.remove('hidden'); };
@@ -842,6 +891,7 @@ function renderSettings(){
   $('modeHint').textContent=HINTS[S.mode]; $('calBtn').classList.toggle('hidden',S.mode!=='color');
   $('calBtn').textContent=S.calib?'🎯 Re-calibrate ball color':'🎯 Calibrate ball color';
   $('sens').value=S.sens; $('sensVal').textContent=S.sens;
+  document.querySelectorAll('#camSeg button').forEach(b=>b.classList.toggle('on',b.dataset.f===S.facing));
   $('optKnee').checked=S.knee; $('optPose').checked=S.pose; $('optVoice').checked=S.voice; $('optRec').checked=S.rec; $('optDbg').checked=S.debug;
   $('inName').value=S.name;
 }
@@ -863,6 +913,8 @@ $('saveVid').onclick=saveReplay;
 $('chips').onclick=e=>{ const b=e.target.closest('.chip'); if(!b) return; if(busy()) return toast('Finish the round first');
   S.sel=b.dataset.id; store.set('sel',S.sel); state='idle'; $('resOv').classList.add('hidden'); renderDrillInfo(); };
 $('lvlSeg').onclick=e=>{ const b=e.target.closest('button'); if(!b) return; if(busy()) return toast('Finish the round first'); S.level=b.dataset.l; store.set('level',S.level); state='idle'; renderDrillInfo(); };
+$('camSeg').onclick=e=>{ const b=e.target.closest('button'); if(b) switchCamera(b.dataset.f); };
+$('flipBtn').onclick=()=>switchCamera(S.facing==='user'?'environment':'user');
 $('setBtn').onclick=openSheet; $('playerChip').onclick=openSheet;
 $('closeSheet').onclick=closeSheet;
 $('sheet').onclick=e=>{ if(e.target.id==='sheet') closeSheet(); };
