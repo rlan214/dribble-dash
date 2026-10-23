@@ -424,6 +424,7 @@ async function loadModels(){
 /* ---------------- ball trackers ---------------- */
 function rgb2hsv(r,g,b){ const mx=Math.max(r,g,b), mn=Math.min(r,g,b), df=mx-mn; if(!df) return null;
   let h; if(mx===r) h=((g-b)/df)%6; else if(mx===g) h=(b-r)/df+2; else h=(r-g)/df+4; h*=60; if(h<0) h+=360; return [h,df/mx,mx/255]; }
+let colorClash=false, clashSince=0;
 let mask=new Uint8Array(0), labels=new Int32Array(0), stack=new Int32Array(0), chosen=-1;
 function colorTrack(){
   sctx.drawImage(video,0,0,SW,SH);
@@ -447,14 +448,16 @@ function colorTrack(){
       if(x<SW-1){k=j+1; if(mask[k]&&!labels[k]){labels[k]=lab;stack[sp++]=k;}}
       if(y>0){k=j-SW; if(mask[k]&&!labels[k]){labels[k]=lab;stack[sp++]=k;}}
       if(y<SH-1){k=j+SW; if(mask[k]&&!labels[k]){labels[k]=lab;stack[sp++]=k;}} }
-    if(cnt<8) continue;
+    if(cnt<8 || cnt>SW*SH*.12) continue; // a ball is never bigger than ~12% of the frame (stops locking onto floors/walls)
     const w=x1-x0+1, h=y1-y0+1, ar=w/h, fill=cnt/(w*h);
     if(ar<.3||ar>3.2||fill<.25) continue;
     const cx=sx/cnt/SW, cy=sy/cnt/SH; let score=cnt;
     if(prev) score=cnt/(1+Math.hypot(cx-prev.x,cy-prev.y)*4);
     if(!best||score>best.score) best={score,x:cx,y:cy,r:Math.max(w,h)/2/SH,label:lab};
   }
-  chosen=best?best.label:-1; return best;
+  chosen=best?best.label:-1;
+  let m=0; for(let i=0;i<n;i++) m+=mask[i]; colorClash = m>n*.25;
+  return best;
 }
 // calibration picks the MOST COMMON hue in the circle (works for two-tone balls)
 function sampleCalib(){
@@ -626,6 +629,7 @@ function status(obs,now){
   const dot=$('dot'), msg=$('trackMsg'); dot.className='dot'; if(now-lastFlash<150) dot.classList.add('hit');
   let m;
   if(S.mode==='color'&&!S.calib) m='Calibrate the ball in ⚙️';
+  else if(S.mode==='color'&&colorClash){ m='⚠️ Ball color matches the floor/room — switch to AI in ⚙️'; if(!clashSince) clashSince=now; else if(now-clashSince>3000){ clashSince=now+20000; toast('Your ball blends into the room in Color mode. Tap ⚙️ → AI.'); } }
   else if(S.mode==='ai'&&!ballDet) m=aiLoading?'Loading AI tracker…':'AI tracker not loaded';
   else if(obs){ m='Tracking ball'; if(!dot.classList.contains('hit')) dot.classList.add('ok'); }
   else m='Looking for the ball…';
