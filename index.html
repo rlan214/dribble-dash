@@ -869,7 +869,7 @@ const SHOT_CHECKS={
 const SHOT_PRIORITY={front:['elbow','follow','knees','legs','high','stance','drift'], side:['setL','rock','follow','knees','ext','legs','high','drift']};
 const SHOT_CUES={knees:'Bend and extend! Use your legs.', stance:'Balance. Feet shoulder width apart.', elbow:'No chicken wing! Elbow in an L, under the ball.',
   high:'Shoot it up high, over your head.', follow:'Hold it! All four to the floor, two seconds.', ext:'Arm straight up and snap the wrist.',
-  setL:'Make an L under the ball. Load the gun.', rock:"Don't rock the baby! Elbow goes straight up.", drift:'Balance! Land right where you jumped.', legs:'Keep your legs under you.'};
+  setL:'Make an L under the ball. Pizza tray!', rock:"Don't rock the baby! Elbow goes straight up.", drift:'Balance! Land right where you jumped.', legs:'Keep your legs under you.'};
 const FOLLOW_SECS=2;
 const ang=(a,b,c)=>{ const v1x=a.x-b.x,v1y=a.y-b.y,v2x=c.x-b.x,v2y=c.y-b.y; const d=Math.hypot(v1x,v1y)*Math.hypot(v2x,v2y); return d?Math.acos(Math.max(-1,Math.min(1,(v1x*v2x+v1y*v2y)/d)))*180/Math.PI:180; };
 const med=a=>{ if(!a.length) return null; const b=[...a].sort((x,y)=>x-y); return b[b.length>>1]; };
