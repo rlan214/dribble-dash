@@ -293,7 +293,7 @@ const DR = {
   blitz30:{name:'30-Sec Blitz',  kind:'timed', secs:30, metric:'all',  par:2.8, desc:'Most dribbles in 30 seconds. Any hand.', cue:'Thirty second blitz. As fast as you can!'},
   blitz60:{name:'60-Sec Challenge',kind:'timed',secs:60,metric:'all',  par:2.5, desc:'Most dribbles in one minute. Pace yourself!', cue:'Sixty second challenge. Keep a steady pace!'},
   race100:{name:'Race to 100',   kind:'target',target:100,metric:'all',par:40,  desc:'Hit 100 dribbles as fast as you can.', cue:'Race to one hundred. Go fast!'},
-  shot:   {name:'Shot Form', kind:'shot', target:10, metric:'shot', desc:'Form shots, no hoop needed. 10 shots — the coach checks every one.', cue:'Shot form. Ten shots. Set, rise, and hold that follow through!'},
+  shot:   {name:'Shot Form', kind:'shot', target:10, metric:'shot', desc:'Coach Behn B.E.E.F. form shots, no hoop needed. 10 shots — every one gets checked.', cue:'Shot form. Balance, eyes on the rim, elbow in an L, and hold that follow through!'},
   free:   {name:'Free Dribble',  kind:'free', metric:'all', desc:'No clock. Practice anything and watch your stats.', cue:'Free dribble. Have fun!'}
 };
 const LEVELS = {
@@ -861,14 +861,16 @@ function setGo(t,cls=''){ const b=$('goBtn'); b.textContent=t; b.className='go'+
 
 /* ---------------- shooting form (pose only, no hoop) ---------------- */
 // front view = iPad faces her; side view = iPad at her side, shooting arm closest
+// Coaching rules follow Sarah Behn's B.E.E.F. method (Basketball by Behn): Balance, Eyes, Elbow ("L", no chicken wing), Follow-through ("all four to the floor", hold 2-3 sec)
 const SHOT_CHECKS={
-  front:[['knees','Knees bent'],['stance','Feet shoulder-width'],['elbow','Elbow in'],['high','Release high'],['follow','Hold follow-through'],['legs','Legs quiet in the air'],['drift','Land on your spot']],
-  side:[['knees','Knees bent'],['ext','Full arm extension'],['high','Release high'],['follow','Hold follow-through'],['legs','No leg kick'],['drift','Straight up, no fade']]
+  front:[['knees','Bend & extend'],['stance','Balance: feet shoulder-width'],['elbow','No chicken wing'],['high','Release high'],['follow','Hold it 2 sec · all four to the floor'],['legs','Legs quiet in the air'],['drift','Land on your spot']],
+  side:[['knees','Bend & extend'],['setL','L under the ball'],['rock','No rocking the baby'],['ext','Arm straight up'],['high','Release high'],['follow','Hold it 2 sec · all four to the floor'],['legs','No leg kick'],['drift','Land on your spot']]
 };
-const SHOT_PRIORITY={front:['legs','elbow','knees','high','follow','drift','stance'], side:['knees','ext','legs','high','follow','drift']};
-const SHOT_CUES={knees:'Bend your knees. Power comes from your legs.', stance:'Feet shoulder width apart.', elbow:'Elbow in, right under the ball.',
-  high:'Release it high, above your forehead.', follow:'Hold your follow through. Hand in the cookie jar.', ext:'Reach all the way up. Straighten that elbow.',
-  drift:'Land right where you jumped.', legs:'Keep your legs under you.'};
+const SHOT_PRIORITY={front:['elbow','follow','knees','legs','high','stance','drift'], side:['setL','rock','follow','knees','ext','legs','high','drift']};
+const SHOT_CUES={knees:'Bend and extend! Use your legs.', stance:'Balance. Feet shoulder width apart.', elbow:'No chicken wing! Elbow in an L, under the ball.',
+  high:'Shoot it up high, over your head.', follow:'Hold it! All four to the floor, two seconds.', ext:'Arm straight up and snap the wrist.',
+  setL:'Make an L under the ball. Load the gun.', rock:"Don't rock the baby! Elbow goes straight up.", drift:'Balance! Land right where you jumped.', legs:'Keep your legs under you.'};
+const FOLLOW_SECS=2;
 const ang=(a,b,c)=>{ const v1x=a.x-b.x,v1y=a.y-b.y,v2x=c.x-b.x,v2y=c.y-b.y; const d=Math.hypot(v1x,v1y)*Math.hypot(v2x,v2y); return d?Math.acos(Math.max(-1,Math.min(1,(v1x*v2x+v1y*v2y)/d)))*180/Math.PI:180; };
 const med=a=>{ if(!a.length) return null; const b=[...a].sort((x,y)=>x-y); return b[b.length>>1]; };
 const mean=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:null;
@@ -899,7 +901,7 @@ function shotUpdate(now,ar){
     if(f.armOK && f.wr.y < f.sh.y-.02){ shot.st='up'; shot.up=[f]; shot.t0=now; }
   } else {
     shot.up.push(f);
-    const done = (f.wr.y > f.sh.y+.03 && now-shot.t0>250) || now-shot.t0>4000;
+    const done = (f.wr.y > f.sh.y+.03 && now-shot.t0>250) || now-shot.t0>7000;
     if(done){ evalShot(shot.buf.slice(), shot.up.slice()); shot.st='wait'; shot.buf=[]; shot.up=[]; }
   }
 }
@@ -909,8 +911,10 @@ function evalShot(pre,U){
   const view=S.view, res={}, why={};
   const base=body.base, rise=[...pre,...U.slice(0,pi+1)];
   // knees
-  if(view==='front'){ const legs=rise.filter(f=>f.ankOK).map(f=>f.leg); if(base&&legs.length>3){ const depth=1-Math.min(...legs)/base; res.knees=depth>=.06; } }
-  else { const ks=rise.map(f=>f.knee); if(ks.length>3) res.knees=Math.min(...ks)<=150; }
+  // "Bend and Extend": legs load before the shot and are straight again by the release
+  const atRel=U.slice(Math.max(0,pi-2),pi+2);
+  if(view==='front'){ const legs=rise.filter(f=>f.ankOK).map(f=>f.leg); if(base&&legs.length>3){ const depth=1-Math.min(...legs)/base, ext=Math.max(...atRel.map(f=>f.leg))/base; res.knees=depth>=.06&&ext>=.93; why.knees=depth<.06?'bend':'extend'; } }
+  else { const ks=rise.map(f=>f.knee); if(ks.length>3){ const bent=Math.min(...ks)<=150, ext=Math.max(...atRel.map(f=>f.knee))>=160; res.knees=bent&&ext; why.knees=!bent?'bend':'extend'; } }
   // stance width (front): feet roughly shoulder width
   const preA=pre.filter(f=>f.ankOK), sw=med(pre.map(f=>f.sw))||pk.sw;
   if(view==='front'&&preA.length>3){ const r=med(preA.map(f=>Math.abs(f.aL.x-f.aR.x)))/sw; res.stance=r>=.55&&r<=1.8; }
@@ -920,13 +924,20 @@ function evalShot(pre,U){
     if(!set.length){ const c=U.slice(0,pi+1).filter(f=>f.el.y>f.wr.y); if(c.length) set=[c.reduce((a,b)=>b.elb<a.elb?b:a)]; }
     if(set.length){ const tilt=med(set.map(f=>Math.atan2(Math.abs(f.wr.x-f.el.x),f.el.y-f.wr.y)*180/Math.PI)); res.elbow=tilt<=22; why.elbow=Math.round(tilt)+'°'; }
   }
+  if(view==='side'){
+    // "L" at the set point: tightest elbow angle once the ball is above her shoulder
+    const setF=U.slice(0,pi+1).filter(f=>f.wr.y<f.sh.y); if(setF.length){ const m=Math.min(...setF.map(f=>f.elb)); res.setL=m>=65&&m<=115; why.setL=Math.round(m)+'°'; }
+    // "rocking the baby": elbow drops back down on the way up instead of going straight up
+    let lo=Infinity, rock=0; for(const f of U.slice(0,pi+1)){ lo=Math.min(lo,f.el.y); rock=Math.max(rock,f.el.y-lo); }
+    res.rock = rock <= (base?base*.12:.035);
+  }
   // release height: wrist well above the head at the top
   res.high = (pk.nose.y-pk.wr.y) >= .5*Math.max(.02,pk.sh.y-pk.nose.y);
   // extension (side): elbow nearly straight at release
   if(view==='side'){ const w=U.slice(Math.max(0,pi-2),pi+3).map(f=>f.elb); res.ext=Math.max(...w)>=150; why.ext=Math.round(Math.max(...w))+'°'; }
   // follow-through: hand stays up after release
   let endT=U[U.length-1].t; for(let i=pi;i<U.length;i++){ if(U[i].wr.y>U[i].nose.y){ endT=U[i].t; break; } }
-  res.follow=(endT-pk.t)>=350;
+  res.follow=(endT-pk.t)>=FOLLOW_SECS*1000;
   // legs + landing (only once her feet leave the floor)
   if(preA.length>3 && base){
     const floor=med(preA.map(f=>Math.max(f.aL.y,f.aR.y)));
@@ -956,7 +967,7 @@ function evalShot(pre,U){
   shot.last={res,why,score,t:performance.now()};
   const miss=SHOT_PRIORITY[view].find(k=>res[k]===false);
   if(!miss){ beep(1100,.15,.3); pop(R.streak>=3?'ON FIRE!':'PERFECT FORM','#5ff0a0',null,.25,true); say(R.streak>=3?'Perfect again! On fire!':'Perfect form!',{urgent:true}); }
-  else { beep(520,.12,.25); pop(SHOT_CHECKS[view].find(c=>c[0]===miss)[1].toUpperCase()+'!','#ff5a4f',null,.25); say((score>=70?'Good shot. ':'')+(miss==='legs'&&why.legs?why.legs:SHOT_CUES[miss]),{urgent:true}); }
+  else { beep(520,.12,.25); pop(({follow:'HOLD IT!',elbow:'CHICKEN WING!',rock:'ROCKING!',setL:'MAKE AN L!',knees:'BEND & EXTEND!',legs:'LEGS!',high:'HIGHER!',ext:'ARM UP!',drift:'BALANCE!',stance:'BALANCE!'})[miss]||'FIX IT!','#ff5a4f',null,.25); say((score>=70?'Good shot. ':'')+(miss==='legs'&&why.legs?why.legs: miss==='knees'&&why.knees==='extend'?'Extend! Push up through your legs.' : miss==='knees'&&why.knees==='bend'?'Bend your knees first!' : SHOT_CUES[miss]),{urgent:true}); }
   renderFormList(res,R.shots); updateBoard();
   if(R.reps>=R.def.target) later(()=>endSegment(),1600);
 }
@@ -1044,7 +1055,7 @@ function renderPB(){ $('pb').textContent=pbText(); }
 function renderDrillInfo(){
   renderChips();
   if(S.sel==='workout'){ $('dName').textContent=WK().name; $('dDesc').textContent=WK().desc; $('timeLbl').textContent='TIME'; $('sTime').textContent=fmt(WK().segs.reduce((a,s)=>a+(s.secs||s.rest),0)); $('bigLbl').textContent='REPS'; }
-  else if(S.sel==='shot'){ const d=DR.shot; $('dName').textContent=d.name+' · '+(S.view==='front'?'Front':'Side'); $('dDesc').textContent=S.view==='front'?'iPad faces her. Checks knees, feet, elbow, release, follow-through, and legs kicking left/right.':'iPad at her side, shooting arm closest. Checks knees, extension, release, follow-through, leg kick, and fading.';
+  else if(S.sel==='shot'){ const d=DR.shot; $('dName').textContent=d.name+' · '+(S.view==='front'?'Front':'Side'); $('dDesc').textContent=S.view==='front'?'Coach Behn B.E.E.F. — iPad faces her. Checks bend & extend, balance, chicken wing, release, the 2-second hold, and legs kicking left/right.':'Coach Behn B.E.E.F. — iPad at her side, shooting arm closest. Checks the L, rocking the baby, arm straight up, bend & extend, the 2-second hold, and leg kick.';
     $('timeLbl').textContent='TIME'; $('sTime').textContent='0:00'; $('bigLbl').textContent='SHOTS'; }
   else{ const d=DR[S.sel]; $('dName').textContent=d.name; $('dDesc').textContent=d.desc;
     $('timeLbl').textContent=d.kind==='timed'?'LEFT':'TIME'; $('sTime').textContent=d.kind==='timed'?fmt(d.secs):d.kind==='target'?'0.0s':'0:00';
