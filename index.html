@@ -156,6 +156,12 @@ input[type=range]{width:100%;accent-color:var(--gold);height:30px}
 .two{display:grid;grid-template-columns:1fr 90px;gap:8px}
 .txt{background:var(--deep);border:1px solid var(--line);border-radius:10px;padding:10px;font-size:18px;color:var(--ink);font-family:var(--ui);width:100%;-webkit-user-select:text;user-select:text}
 video#replay{width:100%;max-height:60vh;border-radius:12px;background:#000}
+body.shotmode .meter,body.shotmode #mult{display:none!important}
+.formlist{display:none;flex-direction:column;gap:5px}
+body.shotmode .formlist{display:flex}
+.frow{display:flex;align-items:center;gap:8px;background:rgba(0,0,0,.22);border-radius:10px;padding:6px 10px;font-size:17px;font-weight:700}
+.frow .fn{flex:1}.frow .fm{width:26px;text-align:center;font-size:18px}.frow .fp{width:52px;text-align:right;color:var(--muted);font-variant-numeric:tabular-nums}
+.frow.ok{box-shadow:inset 4px 0 0 var(--good)}.frow.bad{box-shadow:inset 4px 0 0 var(--red)}
 .toast{position:fixed;left:50%;bottom:calc(22px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#000;color:#fff;padding:11px 20px;border-radius:999px;font-weight:700;font-size:17px;z-index:30;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw;text-align:center}
 .toast.show{opacity:.94}
 </style>
@@ -211,15 +217,16 @@ video#replay{width:100%;max-height:60vh;border-radius:12px;background:#000}
     <div class="dname" id="dName"></div>
     <div class="ddesc" id="dDesc"></div>
     <div class="segc lvl hidden" id="lvlSeg"><button data-l="rookie"></button><button data-l="varsity"></button><button data-l="allstar"></button></div>
+    <div class="segc lvl hidden" id="viewSeg" style="grid-template-columns:1fr 1fr"><button data-v="front">FRONT VIEW<small>facing iPad</small></button><button data-v="side">SIDE VIEW<small>shooting arm to iPad</small></button></div>
     <div class="bigrow">
       <div><div class="biglbl" id="bigLbl">DRIBBLES</div><div class="big" id="big">0</div></div>
       <div class="mult" id="mult">×1</div>
     </div>
     <div class="stats">
-      <div class="stat"><div class="l">SCORE</div><div class="v" id="sScore">0</div></div>
+      <div class="stat"><div class="l" id="lScore">SCORE</div><div class="v" id="sScore">0</div></div>
       <div class="stat"><div class="l" id="timeLbl">TIME</div><div class="v" id="sTime">0:30</div></div>
-      <div class="stat"><div class="l">SPEED</div><div class="v" id="sSpeed">–</div></div>
-      <div class="stat"><div class="l">STREAK</div><div class="v" id="sStreak">0</div></div>
+      <div class="stat"><div class="l" id="lSpeed">SPEED</div><div class="v" id="sSpeed">–</div></div>
+      <div class="stat"><div class="l" id="lStreak">STREAK</div><div class="v" id="sStreak">0</div></div>
     </div>
     <div class="meter"><span class="lab">HEIGHT</span>
       <span class="seg LOW" id="zLOW">LOW</span><span class="seg WAIST" id="zWAIST">WAIST</span><span class="seg HIGH" id="zHIGH">HIGH</span>
@@ -227,6 +234,7 @@ video#replay{width:100%;max-height:60vh;border-radius:12px;background:#000}
     <div class="meter"><span class="lab">KNEES</span>
       <span class="seg kn" id="kSTRAIGHT">STRAIGHT</span><span class="seg kn" id="kBENT">BENT ✓</span>
     </div>
+    <div class="formlist" id="formList"></div>
     <div class="pb">Best: <b id="pb">—</b></div>
     <div class="track"><span class="dot" id="dot"></span><span id="trackMsg">Camera off</span></div>
     <button class="go" id="goBtn">START</button>
@@ -248,6 +256,8 @@ video#replay{width:100%;max-height:60vh;border-radius:12px;background:#000}
     <div class="slbl">Sensitivity <span id="sensVal"></span></div>
     <input type="range" min="1" max="10" step="1" id="sens">
     <p class="hint">Missing dribbles? Turn it up. Counting extras? Turn it down.</p>
+    <div class="slbl">Shooting hand</div>
+    <div class="segc" id="handSeg"><button data-h="right">Right</button><button data-h="left">Left</button></div>
     <label class="row"><input type="checkbox" id="optPose"> Body tracking (height + crossovers)</label>
     <label class="row"><input type="checkbox" id="optKnee"> Knee-bend coaching</label>
     <label class="row"><input type="checkbox" id="optVoice"> Coach voice</label>
@@ -283,6 +293,7 @@ const DR = {
   blitz30:{name:'30-Sec Blitz',  kind:'timed', secs:30, metric:'all',  par:2.8, desc:'Most dribbles in 30 seconds. Any hand.', cue:'Thirty second blitz. As fast as you can!'},
   blitz60:{name:'60-Sec Challenge',kind:'timed',secs:60,metric:'all',  par:2.5, desc:'Most dribbles in one minute. Pace yourself!', cue:'Sixty second challenge. Keep a steady pace!'},
   race100:{name:'Race to 100',   kind:'target',target:100,metric:'all',par:40,  desc:'Hit 100 dribbles as fast as you can.', cue:'Race to one hundred. Go fast!'},
+  shot:   {name:'Shot Form', kind:'shot', target:10, metric:'shot', desc:'Form shots, no hoop needed. 10 shots — the coach checks every one.', cue:'Shot form. Ten shots. Set, rise, and hold that follow through!'},
   free:   {name:'Free Dribble',  kind:'free', metric:'all', desc:'No clock. Practice anything and watch your stats.', cue:'Free dribble. Have fun!'}
 };
 const LEVELS = {
@@ -295,8 +306,8 @@ const LEVELS = {
 };
 const WK = () => { const L=LEVELS[S.level]||LEVELS.rookie; return {...L, name:'Angels Workout · '+L.label}; };
 const wkMins = l => Math.round(LEVELS[l].segs.reduce((a,x)=>a+(x.secs||x.rest),0)/30)/2;
-const pbKey = () => S.sel==='workout' ? 'workout-'+S.level : S.sel;
-const CHIPS = [['workout','⭐ Angels Workout'],['pound','Pound'],['low','Low'],['cross','Crossovers'],['blitz30','30s Blitz'],['blitz60','60s'],['race100','Race 100'],['free','Free']];
+const pbKey = () => S.sel==='workout' ? 'workout-'+S.level : S.sel==='shot' ? 'shot-'+S.view : S.sel;
+const CHIPS = [['workout','⭐ Angels Workout'],['shot','🎯 Shot Form'],['pound','Pound'],['low','Low'],['cross','Crossovers'],['blitz30','30s Blitz'],['blitz60','60s'],['race100','Race 100'],['free','Free']];
 
 /* ---------------- storage ---------------- */
 const store = {
@@ -306,7 +317,7 @@ const store = {
 const S = {
   mode:store.get('mode','ai'), sens:store.get('sens',5), calib:store.get('calib',null),
   pose:store.get('pose',true), knee:store.get('knee',true), voice:store.get('voice',true), rec:store.get('rec',true), debug:store.get('debug',false), facing:store.get('facing','user'),
-  sel:store.get('sel','workout'), level:store.get('level','rookie'), name:store.get('name','Kryslana')
+  sel:store.get('sel','workout'), level:store.get('level','rookie'), view:store.get('view','front'), hand:store.get('hand','right'), name:store.get('name','Kryslana')
 };
 let pbs = store.get('pbs',{});
 
@@ -552,8 +563,9 @@ function loop(now){
     frameN++;
     if(frameN%20===0) greenCheck();
     let obs=null;
-    if(S.mode==='color') obs=colorTrack(); else if(ballDet) obs=aiTrack(now);
-    if(poseDet && S.pose && poseAuto && (frameN%(fps<24?3:2)===0)) poseTrack(now);
+    const shotMode=S.sel==='shot';
+    if(!shotMode){ if(S.mode==='color') obs=colorTrack(); else if(ballDet) obs=aiTrack(now); }
+    if(poseDet && S.pose && poseAuto && (shotMode || frameN%(fps<24?3:2)===0)){ const was=body.at; poseTrack(now); if(shotMode && body.at!==was) shotUpdate(now,vw/vh); }
     const ev=bounce.feed(obs,now);
     if(obs){ prev=obs; prevAt=now; trail.push({x:obs.x,y:obs.y,t:now}); } else if(now-prevAt>500) prev=null;
     while(trail.length&&now-trail[0].t>350) trail.shift();
@@ -568,7 +580,7 @@ function loop(now){
   requestAnimationFrame(loop);
 }
 function perfGuard(now){
-  if(!poseDet||!S.pose||!poseAuto) return;
+  if(!poseDet||!S.pose||!poseAuto||S.sel==='shot') return; // shot mode needs the body tracker no matter what
   if(fps<13){ if(!slowSince) slowSince=now; else if(now-slowSince>3500){ poseAuto=false; toast('Device is busy — height & crossovers turned off to keep counting accurate'); } }
   else slowSince=0;
 }
@@ -601,6 +613,7 @@ function draw(obs,vw,vh,now){
       const tx=X((L[25].x+L[26].x)/2,vw), ty=Math.max(L[25].y,L[26].y)*vh+u*7; vctx.strokeText('BEND!',tx,ty); vctx.fillStyle='#ff5a4f'; vctx.fillText('BEND!',tx,ty); }
     vctx.restore();
   }
+  if(S.sel==='shot') drawShot(vw,vh,u,now);
   // ball trail + ring
   for(let i=0;i<trail.length;i++){ const t=trail[i], a=(i+1)/trail.length; vctx.fillStyle=`rgba(246,198,35,${a*.45})`; vctx.beginPath(); vctx.arc(X(t.x,vw),t.y*vh,u*(.6+a*1.2),0,7); vctx.fill(); }
   if(obs){ const x=X(obs.x,vw), y=obs.y*vh, r=Math.max(obs.r*vh,u*2);
@@ -633,7 +646,8 @@ function status(obs,now){
   else if(S.mode==='ai'&&!ballDet) m=aiLoading?'Loading AI tracker…':'AI tracker not loaded';
   else if(obs){ m='Tracking ball'; if(!dot.classList.contains('hit')) dot.classList.add('ok'); }
   else m='Looking for the ball…';
-  if(S.pose){ m+= !poseAuto?' · body off (busy)': poseLoading&&!poseDet?' · loading body…': bodyOK(now)?' · body ✓':' · step back so feet show'; }
+  if(S.sel==='shot'){ m = !poseDet ? (poseLoading?'Loading body tracker…':'Body tracker not loaded — turn on Body tracking in ⚙️') : bodyOK(now) ? (shot.lastSeenHands?'Body ✓ · shoot when ready':'Body ✓ · keep hands on screen') : 'Step back — head to feet (and hands up) must show'; if(bodyOK(now)) dot.classList.add('ok'); }
+  else if(S.pose){ m+= !poseAuto?' · body off (busy)': poseLoading&&!poseDet?' · loading body…': bodyOK(now)?' · body ✓':' · step back so feet show'; }
   if(msg.textContent!==m) msg.textContent=m;
 }
 
@@ -642,6 +656,7 @@ function newRun(def,secs){ return {def,secs,reps:0,all:0,score:0,streak:0,best:0
 function zoneOf(h){ const kr=(body.ankleY-body.kneeY)/(body.ankleY-body.hipY); return h<=kr*1.15?'LOW':h<=1.15?'WAIST':'HIGH'; }
 const BEND_DEPTH=.07; // hips ~7% lower than standing = knees bent
 function stanceUpdate(now){
+  if(S.sel==='shot'){ if(stance.bent!=null){ stance.bent=null; showKnee(null); } return; }
   if(!S.knee || !bodyOK(now) || !body.ankOK || !body.base){ if(stance.bent!=null){ stance.bent=null; showKnee(null); } return; }
   stance.depth=1-body.leg/body.base;
   const bent = stance.bent ? stance.depth>BEND_DEPTH*.7 : stance.depth>BEND_DEPTH; // hysteresis
@@ -655,7 +670,7 @@ function stanceUpdate(now){
 function showKnee(b){ $('kBENT').classList.toggle('lit',b===true); $('kSTRAIGHT').classList.toggle('lit',b===false); }
 function onDribble(ev,now){
   lastFlash=now;
-  if(state!=='running'||!R||now<R.ignoreUntil) return;
+  if(state!=='running'||!R||now<R.ignoreUntil||R.def.kind==='shot') return;
   const d=R.def; R.all++; R.times.push(now);
   let zone=null, side=null;
   if(bodyOK(now)){
@@ -709,6 +724,8 @@ function tick(now){
 }
 function updateBoard(now=performance.now()){
   if(!R) return;
+  if(R.def.kind==='shot'){ const n=R.shots.length; $('big').textContent=n+'/'+R.def.target; $('sScore').textContent=n?Math.round(R.shots.reduce((a,x)=>a+x.score,0)/n):'–';
+    $('sSpeed').textContent=n?R.shots[n-1].score:'–'; $('sStreak').textContent=R.streak; $('sTime').textContent=clockText(); return; }
   $('big').textContent=R.reps; $('sScore').textContent=R.score; $('sStreak').textContent=R.streak;
   $('sTime').textContent=clockText().replace('REST ','');
   const sp=speedNow(now); $('sSpeed').textContent=R.all?sp.toFixed(1):'–';
@@ -721,8 +738,9 @@ function buildSegs(){ if(S.sel==='workout') return WK().segs.map(s=>({...s})); c
 function startRun(){
   ensureAudio(); primeVoice();
   if(!camOn) return toast('Turn on the camera first');
-  if(S.mode==='color'&&!S.calib) return toast('Calibrate the ball first (⚙️)');
-  if(S.mode==='ai'&&!ballDet) return toast(aiLoading?'AI is still loading — one sec':'AI tracker not loaded — check internet');
+  if(S.sel==='shot'){ if(!S.pose) return toast('Turn on Body tracking in ⚙️ for Shot Form'); if(!poseDet) return toast(poseLoading?'Body tracker still loading — one sec':'Body tracker not loaded — check internet'); }
+  else if(S.mode==='color'&&!S.calib) return toast('Calibrate the ball first (⚙️)');
+  else if(S.mode==='ai'&&!ballDet) return toast(aiLoading?'AI is still loading — one sec':'AI tracker not loaded — check internet');
   const segs=buildSegs();
   if(segs.some(s=>s.d&&DR[s.d].needsPose) && !poseOn()) toast('Body tracking is off — Low & Crossover will count every dribble');
   $('resOv').classList.add('hidden');
@@ -738,13 +756,14 @@ function nextSegment(first=false){
     $('cdNum').textContent=seg.rest; say('Rest. Next up, '+(nxt?DR[nxt.d].name:'')+'.');
     return;
   }
-  const d=DR[seg.d]; R=newRun(d,seg.secs); state='countdown';
+  const d=DR[seg.d]; R=newRun(d,seg.secs); R.shots=[]; shot.reset(); state='countdown';
   if(S.sel==='workout') $('dName').textContent=WK().label+' · '+d.name; else renderDrillInfo();
   updateBoard();
   const lead=first?'':'';
   showCd(d.name,d.desc,'', S.sel==='workout'?`DRILL ${W.segs.slice(0,W.idx+1).filter(s=>s.d).length} OF ${W.segs.filter(s=>s.d).length}`:lead);
   say((first&&S.knee&&poseOn()?'Stand tall. ':'')+d.cue,{urgent:true});
   if(first&&S.knee&&poseOn()) $('cdNext').textContent='STAND TALL · GET LOW ON GO';
+  if(d.kind==='shot') $('cdNext').textContent=(S.view==='front'?'FRONT VIEW':'SIDE VIEW')+' · STAND TALL FOR THE COUNT';
   const gap=first?2600:2200;
   later(()=>{ $('cdNum').textContent='3'; beep(660); say('3'); },gap);
   later(()=>{ $('cdNum').textContent='2'; beep(660); say('2'); },gap+1000);
@@ -756,7 +775,7 @@ function nextSegment(first=false){
 }
 function showCd(drill,cue,num,next){ $('cdDrill').textContent=drill; $('cdCue').textContent=cue; $('cdNum').textContent=num; $('cdNext').textContent=next||''; $('cdOv').classList.remove('hidden'); }
 function segRating(r){
-  const d=r.def; if(d.kind==='free'||!r.reps) return d.kind==='free'?null:0;
+  const d=r.def; if(d.kind==='shot') return r.shots.length?Math.round(r.shots.reduce((a,x)=>a+x.score,0)/r.shots.length):0; if(d.kind==='free'||!r.reps) return d.kind==='free'?null:0;
   const perf = d.kind==='target' ? Math.min(1,d.par/Math.max(1,r.elapsed)) : Math.min(1,(r.reps/r.secs)/d.par);
   const control=Math.min(1,r.best/Math.max(1,r.reps*.6));
   return Math.round(100*(.75*perf+.25*control));
@@ -775,6 +794,7 @@ function finish(){
   setGo('START'); if(R&&R.def.kind==='timed') $('sTime').textContent='0:00';
   const rs=W.results; if(!rs.length){ state='idle'; return; }
   const key=pbKey(), isW=S.sel==='workout', last=rs[rs.length-1];
+  if(last.def.kind==='shot') return finishShot(last,key);
   const sum=f=>rs.reduce((a,r)=>a+f(r),0);
   const kT=sum(r=>r.kneeT), kB=sum(r=>r.kneeBentT);
   const reps=sum(r=>r.reps), all=sum(r=>r.all), score=sum(r=>r.score), secs=sum(r=>r.elapsed), cross=sum(r=>r.cross);
@@ -839,6 +859,149 @@ function cancelRun(){
 function goPressed(){ if(state==='idle'||state==='done') startRun(); else cancelRun(); }
 function setGo(t,cls=''){ const b=$('goBtn'); b.textContent=t; b.className='go'+(cls?' '+cls:''); }
 
+/* ---------------- shooting form (pose only, no hoop) ---------------- */
+// front view = iPad faces her; side view = iPad at her side, shooting arm closest
+const SHOT_CHECKS={
+  front:[['knees','Knees bent'],['stance','Feet shoulder-width'],['elbow','Elbow in'],['high','Release high'],['follow','Hold follow-through'],['legs','Legs quiet in the air'],['drift','Land on your spot']],
+  side:[['knees','Knees bent'],['ext','Full arm extension'],['high','Release high'],['follow','Hold follow-through'],['legs','No leg kick'],['drift','Straight up, no fade']]
+};
+const SHOT_PRIORITY={front:['legs','elbow','knees','high','follow','drift','stance'], side:['knees','ext','legs','high','follow','drift']};
+const SHOT_CUES={knees:'Bend your knees. Power comes from your legs.', stance:'Feet shoulder width apart.', elbow:'Elbow in, right under the ball.',
+  high:'Release it high, above your forehead.', follow:'Hold your follow through. Hand in the cookie jar.', ext:'Reach all the way up. Straighten that elbow.',
+  drift:'Land right where you jumped.', legs:'Keep your legs under you.'};
+const ang=(a,b,c)=>{ const v1x=a.x-b.x,v1y=a.y-b.y,v2x=c.x-b.x,v2y=c.y-b.y; const d=Math.hypot(v1x,v1y)*Math.hypot(v2x,v2y); return d?Math.acos(Math.max(-1,Math.min(1,(v1x*v2x+v1y*v2y)/d)))*180/Math.PI:180; };
+const med=a=>{ if(!a.length) return null; const b=[...a].sort((x,y)=>x-y); return b[b.length>>1]; };
+const mean=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:null;
+const shot={
+  st:'wait', buf:[], up:[], t0:0, sm:null, lastSeenHands:false, last:null, flash:0,
+  reset(){ this.st='wait'; this.buf=[]; this.up=[]; this.sm=null; this.last=null; }
+};
+function shotFrame(now,ar){
+  const L=body.lm; if(!L) return null;
+  // light smoothing so jitter doesn't fake a leg kick
+  if(!shot.sm||shot.sm.length!==L.length) shot.sm=L.map(p=>({...p}));
+  else for(let i=0;i<L.length;i++){ const s=shot.sm[i],p=L[i]; s.x+=(p.x-s.x)*.65; s.y+=(p.y-s.y)*.65; s.v=p.v; }
+  const P=i=>({x:shot.sm[i].x*ar, y:shot.sm[i].y, v:shot.sm[i].v}); // x scaled so angles are true
+  const R=S.hand==='right', sh=P(R?12:11), el=P(R?14:13), wr=P(R?16:15), nose=P(0);
+  const hipL=P(23), hipR=P(24), kL=P(25), kR=P(26), aL=P(27), aR=P(28);
+  const legSide = (hipL.v+kL.v+aL.v) >= (hipR.v+kR.v+aR.v) ? [hipL,kL,aL] : [hipR,kR,aR];
+  const hipY=(hipL.y+hipR.y)/2;
+  return { t:now, sh, el, wr, nose, aL, aR, midX:(hipL.x+hipR.x)/2,
+    sw:Math.max(.03,Math.abs(P(11).x-P(12).x)), leg:Math.max(aL.y,aR.y)-hipY,
+    knee:ang(...legSide), elb:ang(sh,el,wr), ankOK:Math.min(aL.v,aR.v)>.35, armOK:Math.min(sh.v,el.v,wr.v)>.3 };
+}
+function shotUpdate(now,ar){
+  if(state!=='running'||!R||R.def.kind!=='shot'||now<R.ignoreUntil||R.shots.length>=R.def.target) { shot.st='wait'; shot.buf=[]; return; }
+  const f=shotFrame(now,ar); if(!f) return;
+  shot.lastSeenHands=f.armOK;
+  if(shot.st==='wait'){
+    shot.buf.push(f); while(shot.buf.length&&now-shot.buf[0].t>1600) shot.buf.shift();
+    if(f.armOK && f.wr.y < f.sh.y-.02){ shot.st='up'; shot.up=[f]; shot.t0=now; }
+  } else {
+    shot.up.push(f);
+    const done = (f.wr.y > f.sh.y+.03 && now-shot.t0>250) || now-shot.t0>4000;
+    if(done){ evalShot(shot.buf.slice(), shot.up.slice()); shot.st='wait'; shot.buf=[]; shot.up=[]; }
+  }
+}
+function evalShot(pre,U){
+  const minY=Math.min(...U.map(f=>f.wr.y)); const pi=U.findIndex(f=>f.wr.y<=minY+.015); const pk=U[pi]; // release = first moment the hand reaches the top
+  if(pk.wr.y > pk.nose.y){ pop('SHOOT IT UP!','#ff5a4f',null,.25); say('Shoot it up, over your head!',{key:'notshot',gap:4000}); return; } // arms never got over her head — not a shot
+  const view=S.view, res={}, why={};
+  const base=body.base, rise=[...pre,...U.slice(0,pi+1)];
+  // knees
+  if(view==='front'){ const legs=rise.filter(f=>f.ankOK).map(f=>f.leg); if(base&&legs.length>3){ const depth=1-Math.min(...legs)/base; res.knees=depth>=.06; } }
+  else { const ks=rise.map(f=>f.knee); if(ks.length>3) res.knees=Math.min(...ks)<=150; }
+  // stance width (front): feet roughly shoulder width
+  const preA=pre.filter(f=>f.ankOK), sw=med(pre.map(f=>f.sw))||pk.sw;
+  if(view==='front'&&preA.length>3){ const r=med(preA.map(f=>Math.abs(f.aL.x-f.aR.x)))/sw; res.stance=r>=.55&&r<=1.8; }
+  // elbow in (front): forearm close to vertical at the set point
+  if(view==='front'){
+    let set=U.slice(0,pi+1).filter(f=>f.armOK&&f.el.y>f.wr.y&&f.elb<135);
+    if(!set.length){ const c=U.slice(0,pi+1).filter(f=>f.el.y>f.wr.y); if(c.length) set=[c.reduce((a,b)=>b.elb<a.elb?b:a)]; }
+    if(set.length){ const tilt=med(set.map(f=>Math.atan2(Math.abs(f.wr.x-f.el.x),f.el.y-f.wr.y)*180/Math.PI)); res.elbow=tilt<=22; why.elbow=Math.round(tilt)+'°'; }
+  }
+  // release height: wrist well above the head at the top
+  res.high = (pk.nose.y-pk.wr.y) >= .5*Math.max(.02,pk.sh.y-pk.nose.y);
+  // extension (side): elbow nearly straight at release
+  if(view==='side'){ const w=U.slice(Math.max(0,pi-2),pi+3).map(f=>f.elb); res.ext=Math.max(...w)>=150; why.ext=Math.round(Math.max(...w))+'°'; }
+  // follow-through: hand stays up after release
+  let endT=U[U.length-1].t; for(let i=pi;i<U.length;i++){ if(U[i].wr.y>U[i].nose.y){ endT=U[i].t; break; } }
+  res.follow=(endT-pk.t)>=350;
+  // legs + landing (only once her feet leave the floor)
+  if(preA.length>3 && base){
+    const floor=med(preA.map(f=>Math.max(f.aL.y,f.aR.y)));
+    const air=U.filter(f=>f.ankOK && Math.min(f.aL.y,f.aR.y)<floor-.025);
+    const jumped=U.some(f=>f.ankOK && Math.max(f.aL.y,f.aR.y)<floor-.02);
+    if(air.length){
+      const kick=Math.max(...air.map(f=>Math.abs(f.aL.y-f.aR.y)))/base;
+      let kickLeg=null; if(kick>.2){ const f=air.reduce((a,b)=>Math.abs(b.aL.y-b.aR.y)>Math.abs(a.aL.y-a.aR.y)?b:a); kickLeg=f.aL.y<f.aR.y?'Left':'Right'; }
+      let outL=false,outR=false;
+      if(view==='front'){ // left/right flail: each ankle's sideways spot vs her hips, compared to her stance
+        const rel=(f,a)=>(a.x-f.midX)/sw, l0=mean(preA.map(f=>rel(f,f.aL))), r0=mean(preA.map(f=>rel(f,f.aR)));
+        outL=Math.max(...air.map(f=>Math.abs(rel(f,f.aL)-l0)))>.45; outR=Math.max(...air.map(f=>Math.abs(rel(f,f.aR)-r0)))>.45;
+      }
+      res.legs=!(kickLeg||outL||outR);
+      why.legs = outL&&outR ? 'Both legs flew out. Keep them under you.' : outL ? 'Left leg kicked out to the side.' : outR ? 'Right leg kicked out to the side.' : kickLeg ? kickLeg+' leg kicked up. Feet together in the air.' : '';
+    }
+    if(jumped){
+      const t1=pre[pre.length-1].t, m0=mean(pre.filter(f=>t1-f.t<500).map(f=>f.midX)), m1=mean(U.slice(-3).map(f=>f.midX));
+      const d=Math.abs(m1-m0)/(view==='front'?sw:base); res.drift = d<=(view==='front'?.7:.45);
+    }
+  }
+  // score + coach
+  const keys=SHOT_CHECKS[view].map(c=>c[0]).filter(k=>res[k]!=null), passed=keys.filter(k=>res[k]).length;
+  const score=keys.length?Math.round(passed/keys.length*100):0;
+  R.shots.push({res,score}); R.reps=R.shots.length; R.all=R.reps; R.score+=score;
+  R.streak = score===100 ? R.streak+1 : 0; R.best=Math.max(R.best,R.streak);
+  shot.last={res,why,score,t:performance.now()};
+  const miss=SHOT_PRIORITY[view].find(k=>res[k]===false);
+  if(!miss){ beep(1100,.15,.3); pop(R.streak>=3?'ON FIRE!':'PERFECT FORM','#5ff0a0',null,.25,true); say(R.streak>=3?'Perfect again! On fire!':'Perfect form!',{urgent:true}); }
+  else { beep(520,.12,.25); pop(SHOT_CHECKS[view].find(c=>c[0]===miss)[1].toUpperCase()+'!','#ff5a4f',null,.25); say((score>=70?'Good shot. ':'')+(miss==='legs'&&why.legs?why.legs:SHOT_CUES[miss]),{urgent:true}); }
+  renderFormList(res,R.shots); updateBoard();
+  if(R.reps>=R.def.target) later(()=>endSegment(),1600);
+}
+function renderFormList(res,shots){
+  const rows=SHOT_CHECKS[S.view].map(([k,lab])=>{
+    const n=shots?shots.filter(s=>s.res[k]!=null).length:0, p=n?Math.round(shots.filter(s=>s.res[k]).length/n*100)+'%':'–';
+    const v=res?res[k]:null, mk=v==null?'·':v?'✓':'✗';
+    return `<div class="frow${v==null?'':v?' ok':' bad'}"><span class="fm">${mk}</span><span class="fn">${lab}</span><span class="fp">${p}</span></div>`; });
+  $('formList').innerHTML=rows.join('');
+}
+function drawShot(vw,vh,u,now){
+  const L=body.lm; if(!L||now-body.at>600) return;
+  const pt=i=>[X(L[i].x,vw),L[i].y*vh], R_=S.hand==='right', arm=R_?[12,14,16]:[11,13,15];
+  const lr=shot.last&&now-shot.last.t<2500?shot.last.res:{};
+  const seg=(ids,col)=>{ vctx.strokeStyle=col; vctx.beginPath(); ids.forEach((i,j)=>{ const [x,y]=pt(i); j?vctx.lineTo(x,y):vctx.moveTo(x,y); }); vctx.stroke(); };
+  vctx.save(); vctx.lineCap='round'; vctx.lineJoin='round'; vctx.lineWidth=Math.max(3,u*.9);
+  seg([23,25,27], lr.legs===false?'#ff5a4f':'rgba(95,240,160,.9)'); seg([24,26,28], lr.legs===false?'#ff5a4f':'rgba(95,240,160,.9)');
+  seg([11,12],'rgba(255,255,255,.6)'); seg([23,24],'rgba(255,255,255,.6)');
+  seg(arm, lr.elbow===false||lr.ext===false?'#ff5a4f':'#f6c623');
+  for(const i of [...arm,25,26,27,28]){ const [x,y]=pt(i); vctx.fillStyle='#fff'; vctx.beginPath(); vctx.arc(x,y,u*.8,0,7); vctx.fill(); }
+  if(S.view==='side'){ const a=Math.round(ang(...arm.map(i=>({x:L[i].x*vw/vh,y:L[i].y})))); const [x,y]=pt(arm[1]);
+    vctx.font=`700 ${u*3.4}px 'Barlow Condensed',sans-serif`; vctx.lineWidth=u*.6; vctx.strokeStyle='#06211a'; vctx.fillStyle='#f6c623'; vctx.strokeText(a+'°',x+u*2,y); vctx.fillText(a+'°',x+u*2,y); }
+  vctx.restore();
+}
+function finishShot(r,key){
+  const n=r.shots.length, avg=n?Math.round(r.shots.reduce((a,x)=>a+x.score,0)/n):0, perfect=r.shots.filter(s=>s.score===100).length;
+  const complete=!r.early&&n>=r.def.target; let better=false;
+  if(complete&&n){ const old=pbs[key]; better=old==null||avg>old; if(better){ pbs[key]=avg; store.set('pbs',pbs); } }
+  const rows=SHOT_CHECKS[S.view].map(([k,lab])=>{ const m=r.shots.filter(s=>s.res[k]!=null).length; return {lab,k,p:m?Math.round(r.shots.filter(s=>s.res[k]).length/m*100):null}; });
+  const worst=rows.filter(x=>x.p!=null).sort((a,b)=>a.p-b.p)[0];
+  $('tcard').innerHTML=`
+    <div class="tc-head"><svg aria-hidden="true"><use href="#gaMark"/></svg><div><div class="a">ANGELS</div><div class="b">SHOT FORM</div></div></div>
+    ${better?'<div class="tc-best">NEW BEST!</div>':''}
+    <div class="tc-main">
+      <div class="tc-rate"><div><b>${n?avg:'–'}</b><small>FORM</small></div></div>
+      <div><div class="tc-drill">Shot Form · ${S.view==='front'?'Front':'Side'}</div><div class="tc-msg">${!complete?'Stopped early — not saved as a best.':worst&&worst.p<100?'Work on: '+worst.lab:'Clean form on every check!'}</div></div>
+    </div>
+    <div class="tc-stats"><div><span>SHOTS</span><b>${n}</b></div><div><span>PERFECT</span><b>${perfect}</b></div><div><span>BEST STREAK</span><b>${r.best}</b></div></div>
+    <div class="tc-segs">${rows.map(x=>`<div><span>${x.lab}</span><b>${x.p==null?'–':x.p+'%'}</b></div>`).join('')}</div>
+    <div class="tc-band">${esc(S.name)}<small>Angels · ${season()}</small></div>`;
+  $('resOv').classList.remove('hidden'); $('replayBtn').classList.toggle('hidden',!recURL&&!(S.rec&&recorder)); renderPB();
+  const lines=[]; if(!complete) lines.push('Round over.'); else { if(better) lines.push('New personal best!'); lines.push(`Form score ${avg}. ${perfect} perfect shots.`); if(worst&&worst.p<100) lines.push('Next time, work on: '+worst.lab+'.'); lines.push(avg>=85?'Lets go Angels!':avg>=60?'Nice work!':'Keep grinding!'); }
+  say(lines.join(' '),{urgent:true}); if(better) beep(1320,.25,.35);
+}
+
 /* ---------------- replay recording ---------------- */
 const recC=document.createElement('canvas'), rctx=recC.getContext('2d');
 function compositeRec(vw,vh){
@@ -874,17 +1037,24 @@ async function saveReplay(){
 
 /* ---------------- UI render ---------------- */
 function renderChips(){ $('chips').innerHTML=CHIPS.map(([id,label])=>`<button class="chip${id===S.sel?' on':''}${id==='workout'?' star':''}" data-id="${id}">${label}</button>`).join(''); }
-function pbText(){ const v=pbs[pbKey()]; if(v==null) return '—'; return S.sel==='race100'?v.toFixed(1)+' sec':v+' pts'; }
+function pbText(){ const v=pbs[pbKey()]; if(v==null) return '—'; return S.sel==='race100'?v.toFixed(1)+' sec':S.sel==='shot'?v+' form':v+' pts'; }
 function renderLevels(){ const on=S.sel==='workout'; $('lvlSeg').classList.toggle('hidden',!on); if(!on) return;
   document.querySelectorAll('#lvlSeg button').forEach(b=>{ const l=b.dataset.l; b.innerHTML=`${LEVELS[l].label.toUpperCase()}<small>${wkMins(l)} min</small>`; b.classList.toggle('on',l===S.level); }); }
 function renderPB(){ $('pb').textContent=pbText(); }
 function renderDrillInfo(){
   renderChips();
   if(S.sel==='workout'){ $('dName').textContent=WK().name; $('dDesc').textContent=WK().desc; $('timeLbl').textContent='TIME'; $('sTime').textContent=fmt(WK().segs.reduce((a,s)=>a+(s.secs||s.rest),0)); $('bigLbl').textContent='REPS'; }
+  else if(S.sel==='shot'){ const d=DR.shot; $('dName').textContent=d.name+' · '+(S.view==='front'?'Front':'Side'); $('dDesc').textContent=S.view==='front'?'iPad faces her. Checks knees, feet, elbow, release, follow-through, and legs kicking left/right.':'iPad at her side, shooting arm closest. Checks knees, extension, release, follow-through, leg kick, and fading.';
+    $('timeLbl').textContent='TIME'; $('sTime').textContent='0:00'; $('bigLbl').textContent='SHOTS'; }
   else{ const d=DR[S.sel]; $('dName').textContent=d.name; $('dDesc').textContent=d.desc;
     $('timeLbl').textContent=d.kind==='timed'?'LEFT':'TIME'; $('sTime').textContent=d.kind==='timed'?fmt(d.secs):d.kind==='target'?'0.0s':'0:00';
     $('bigLbl').textContent=d.metric==='cross'?'CROSSOVERS':d.metric==='low'?'LOW DRIBBLES':'DRIBBLES'; }
-  $('big').textContent='0'; $('sScore').textContent='0'; $('sStreak').textContent='0'; $('sSpeed').textContent='–'; $('mult').textContent='×1'; $('mult').classList.remove('on');
+  const sm=S.sel==='shot'; document.body.classList.toggle('shotmode',sm);
+  $('viewSeg').classList.toggle('hidden',!sm); document.querySelectorAll('#viewSeg button').forEach(b=>b.classList.toggle('on',b.dataset.v===S.view));
+  $('lScore').textContent=sm?'FORM':'SCORE'; $('lSpeed').textContent=sm?'LAST':'SPEED'; $('lStreak').textContent=sm?'PERFECT':'STREAK';
+  if(sm) renderFormList(null,null);
+  $('startMsg').textContent= sm ? (S.view==='front'?'Stand the iPad 8–10 feet away, facing her. Head to feet AND hands over her head must fit on screen.':'Stand the iPad 8–10 feet to her side, shooting arm closest. Head to feet AND hands over her head must fit on screen.') : "Stand the device 6–8 feet away so your whole body and the floor are on screen. Don't point it at a bright window.";
+  $('big').textContent=sm?'0/'+DR.shot.target:'0'; $('sScore').textContent=sm?'–':'0'; $('sStreak').textContent='0'; $('sSpeed').textContent='–'; $('mult').textContent='×1'; $('mult').classList.remove('on');
   renderLevels(); renderPB();
 }
 function renderPlayer(){ $('pName').textContent=S.name.toUpperCase(); $('startNum').textContent=S.name; }
@@ -896,6 +1066,7 @@ function renderSettings(){
   $('calBtn').textContent=S.calib?'🎯 Re-calibrate ball color':'🎯 Calibrate ball color';
   $('sens').value=S.sens; $('sensVal').textContent=S.sens;
   document.querySelectorAll('#camSeg button').forEach(b=>b.classList.toggle('on',b.dataset.f===S.facing));
+  document.querySelectorAll('#handSeg button').forEach(b=>b.classList.toggle('on',b.dataset.h===S.hand));
   $('optKnee').checked=S.knee; $('optPose').checked=S.pose; $('optVoice').checked=S.voice; $('optRec').checked=S.rec; $('optDbg').checked=S.debug;
   $('inName').value=S.name;
 }
@@ -917,6 +1088,8 @@ $('saveVid').onclick=saveReplay;
 $('chips').onclick=e=>{ const b=e.target.closest('.chip'); if(!b) return; if(busy()) return toast('Finish the round first');
   S.sel=b.dataset.id; store.set('sel',S.sel); state='idle'; $('resOv').classList.add('hidden'); renderDrillInfo(); };
 $('lvlSeg').onclick=e=>{ const b=e.target.closest('button'); if(!b) return; if(busy()) return toast('Finish the round first'); S.level=b.dataset.l; store.set('level',S.level); state='idle'; renderDrillInfo(); };
+$('viewSeg').onclick=e=>{ const b=e.target.closest('button'); if(!b) return; if(busy()) return toast('Finish the round first'); S.view=b.dataset.v; store.set('view',S.view); state='idle'; $('resOv').classList.add('hidden'); renderDrillInfo(); };
+$('handSeg').onclick=e=>{ const b=e.target.closest('button'); if(!b) return; if(busy()) return toast('Finish the round first'); S.hand=b.dataset.h; store.set('hand',S.hand); renderSettings(); };
 $('camSeg').onclick=e=>{ const b=e.target.closest('button'); if(b) switchCamera(b.dataset.f); };
 $('flipBtn').onclick=()=>switchCamera(S.facing==='user'?'environment':'user');
 $('setBtn').onclick=openSheet; $('playerChip').onclick=openSheet;
