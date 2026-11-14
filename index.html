@@ -97,6 +97,7 @@ main{flex:1;display:grid;gap:14px;padding-bottom:16px;grid-template-columns:1fr}
 .meter .lab{font-size:13px;font-weight:800;letter-spacing:1.5px;color:var(--muted);width:56px}
 .seg{flex:1;text-align:center;font-weight:800;font-size:15px;letter-spacing:1px;padding:7px 0;border-radius:9px;background:rgba(0,0,0,.25);color:var(--muted);transition:background .1s,color .1s}
 .seg.kn.lit#kBENT{background:var(--good);color:#04301e}.seg.kn.lit#kSTRAIGHT{background:var(--red);color:#fff}
+.seg.hand.lit{background:var(--gold);color:#3a2b00}
 .seg.lit.LOW{background:var(--good);color:#04301e}.seg.lit.WAIST{background:var(--gold);color:#3a2b00}.seg.lit.HIGH{background:var(--red);color:#fff}
 .track{display:flex;align-items:center;gap:9px;font-size:16px;color:var(--muted);font-weight:600}
 .dot{width:13px;height:13px;border-radius:50%;background:#3d5a4f;flex:0 0 auto}
@@ -125,7 +126,7 @@ main{flex:1;display:grid;gap:14px;padding-bottom:16px;grid-template-columns:1fr}
 .tc-rate small{font-weight:800;font-size:12px;letter-spacing:2px;color:var(--cream)}
 .tc-drill{font-family:var(--jersey);font-size:26px;line-height:1.05}
 .tc-msg{color:var(--cream);font-size:18px;margin-top:4px;line-height:1.2}
-.tc-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px}
+.tc-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:14px}
 .tc-stats div{background:rgba(0,0,0,.25);border-radius:10px;padding:7px 4px;text-align:center}
 .tc-stats span{display:block;font-size:11px;font-weight:800;letter-spacing:1.5px;color:var(--muted)}
 .tc-stats b{font-family:var(--jersey);font-weight:400;font-size:22px}
@@ -136,6 +137,7 @@ main{flex:1;display:grid;gap:14px;padding-bottom:16px;grid-template-columns:1fr}
 .resBtns{width:min(420px,100%);margin:14px auto auto;display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .resBtns .go{font-size:20px;padding:13px}
 .resBtns .full{grid-column:1/-1}
+.resBtns .hidden + .go{grid-column:1/-1}
 
 /* sheets */
 .sheet{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:16px;z-index:10}
@@ -202,6 +204,7 @@ video#replay{width:100%;max-height:60vh;border-radius:12px;background:#000}
       <div class="resBtns">
         <button class="go alt" id="replayBtn">▶ Replay</button>
         <button class="go" id="againBtn">Again!</button>
+        <button class="go alt full" id="textBtn">💬 Text Mom &amp; Dad</button>
         <button class="go alt full" id="doneBtn">Done</button>
       </div>
     </div>
@@ -227,6 +230,9 @@ video#replay{width:100%;max-height:60vh;border-radius:12px;background:#000}
     <div class="meter"><span class="lab">KNEES</span>
       <span class="seg kn" id="kSTRAIGHT">STRAIGHT</span><span class="seg kn" id="kBENT">BENT ✓</span>
     </div>
+    <div class="meter"><span class="lab">HAND</span>
+      <span class="seg hand" id="hL">LEFT</span><span class="seg hand" id="hR">RIGHT</span>
+    </div>
     <div class="pb">Best: <b id="pb">—</b></div>
     <div class="track"><span class="dot" id="dot"></span><span id="trackMsg">Camera off</span></div>
     <button class="go" id="goBtn">START</button>
@@ -248,9 +254,14 @@ video#replay{width:100%;max-height:60vh;border-radius:12px;background:#000}
     <div class="slbl">Sensitivity <span id="sensVal"></span></div>
     <input type="range" min="1" max="10" step="1" id="sens">
     <p class="hint">Missing dribbles? Turn it up. Counting extras? Turn it down.</p>
-    <label class="row"><input type="checkbox" id="optPose"> Body tracking (height + crossovers)</label>
+    <label class="row"><input type="checkbox" id="optPose"> Body tracking (height, crossovers, left/right hand)</label>
     <label class="row"><input type="checkbox" id="optKnee"> Knee-bend coaching</label>
     <label class="row"><input type="checkbox" id="optVoice"> Coach voice</label>
+    <div class="segc lvl" id="vpSeg"><button data-v="lily">Lily</button><button data-v="harry">Harry</button><button data-v="device">iPad</button></div>
+    <p class="hint">Lily &amp; Harry are the ElevenLabs coach voices. iPad = the built-in voice (it also says the numbers at the end).</p>
+    <div class="slbl">Parents' phone numbers</div>
+    <input class="txt" id="inPhones" inputmode="tel" placeholder="e.g. 248-555-1234, 248-555-9876">
+    <p class="hint">For the 💬 Text Mom &amp; Dad button. Separate numbers with commas. Leave blank to pick who to send it to.</p>
     <label class="row"><input type="checkbox" id="optRec"> Record replay video</label>
     <label class="row"><input type="checkbox" id="optDbg"> Show what the tracker sees</label>
     <button class="sec danger" id="resetPB">Reset best scores</button>
@@ -267,6 +278,7 @@ video#replay{width:100%;max-height:60vh;border-radius:12px;background:#000}
 </div>
 <div class="toast" id="toast"></div>
 
+<script src="/shared/voicepack.js"></script>
 <script type="module">
 const $ = id => document.getElementById(id);
 const MP = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
@@ -280,6 +292,8 @@ const DR = {
   pound:  {name:'Pound Dribble', kind:'timed', secs:30, metric:'all',  par:2.3, desc:'Hard, fast dribbles with your strong hand. Pound it!', cue:'Pound dribble. Strong hand. Pound it hard!'},
   low:    {name:'Low Dribble',   kind:'timed', secs:30, metric:'low',  par:2.0, desc:'Keep it at your knees. Only low dribbles count.', cue:'Low dribble. Stay low, below your knees!', needsPose:true},
   cross:  {name:'Crossovers',    kind:'timed', secs:30, metric:'cross',par:0.9, desc:'Cross it hand to hand in front of you. Each switch counts.', cue:'Crossovers. Switch hands, quick and low!', needsPose:true},
+  left:   {name:'Left Hand',     kind:'timed', secs:30, metric:'left', par:2.0, desc:'Left hand only. Only left-hand dribbles count.', cue:'Left hand only. Pound it!', needsPose:true},
+  right:  {name:'Right Hand',    kind:'timed', secs:30, metric:'right',par:2.2, desc:'Right hand only. Only right-hand dribbles count.', cue:'Right hand only. Pound it!', needsPose:true},
   blitz30:{name:'30-Sec Blitz',  kind:'timed', secs:30, metric:'all',  par:2.8, desc:'Most dribbles in 30 seconds. Any hand.', cue:'Thirty second blitz. As fast as you can!'},
   blitz60:{name:'60-Sec Challenge',kind:'timed',secs:60,metric:'all',  par:2.5, desc:'Most dribbles in one minute. Pace yourself!', cue:'Sixty second challenge. Keep a steady pace!'},
   race100:{name:'Race to 100',   kind:'target',target:100,metric:'all',par:40,  desc:'Hit 100 dribbles as fast as you can.', cue:'Race to one hundred. Go fast!'},
@@ -296,7 +310,7 @@ const LEVELS = {
 const WK = () => { const L=LEVELS[S.level]||LEVELS.rookie; return {...L, name:'Angels Workout · '+L.label}; };
 const wkMins = l => Math.round(LEVELS[l].segs.reduce((a,x)=>a+(x.secs||x.rest),0)/30)/2;
 const pbKey = () => S.sel==='workout' ? 'workout-'+S.level : S.sel;
-const CHIPS = [['workout','⭐ Angels Workout'],['pound','Pound'],['low','Low'],['cross','Crossovers'],['blitz30','30s Blitz'],['blitz60','60s'],['race100','Race 100'],['free','Free']];
+const CHIPS = [['workout','⭐ Angels Workout'],['pound','Pound'],['low','Low'],['cross','Crossovers'],['left','Left Hand'],['right','Right Hand'],['blitz30','30s Blitz'],['blitz60','60s'],['race100','Race 100'],['free','Free']];
 
 /* ---------------- storage ---------------- */
 const store = {
@@ -306,7 +320,7 @@ const store = {
 const S = {
   mode:store.get('mode','ai'), sens:store.get('sens',5), calib:store.get('calib',null),
   pose:store.get('pose',true), knee:store.get('knee',true), voice:store.get('voice',true), rec:store.get('rec',true), debug:store.get('debug',false), facing:store.get('facing','user'),
-  sel:store.get('sel','workout'), level:store.get('level','rookie'), name:store.get('name','Kryslana')
+  vpack:store.get('vpack','lily'), phones:store.get('phones',''), sel:store.get('sel','workout'), level:store.get('level','rookie'), name:store.get('name','Kryslana')
 };
 let pbs = store.get('pbs',{});
 
@@ -321,7 +335,7 @@ let camOn=false, state='idle'; // idle | countdown | running | rest | done
 let timers=[], prev=null, prevAt=0, lastFlash=0, calibrating=false;
 let actx=null, vision=null, ballDet=null, poseDet=null, aiLoading=false, poseLoading=false;
 let lastBallTs=0, lastPoseTs=0, frameN=0, fps=30, lastLoop=0, slowSince=0, poseAuto=true;
-const body={hipY:0,kneeY:0,ankleY:0,midX:.5,hipW:.1,at:0, lm:null, leg:0, base:0, baseAt:0, ankOK:false};
+const body={lr:1,hipY:0,kneeY:0,ankleY:0,midX:.5,hipW:.1,at:0, lm:null, leg:0, base:0, baseAt:0, ankOK:false};
 const stance={bent:null, depth:0, straightSince:0, bentSince:0, warned:false};
 const trail=[], pops=[];
 let W=null, R=null; // workout run, current segment run
@@ -333,15 +347,20 @@ const fmt=s=>{ s=Math.max(0,s); const m=Math.floor(s/60), r=Math.floor(s%60); re
 const later=(fn,ms)=>{ const id=setTimeout(fn,ms); timers.push(id); return id; };
 function clearTimers(){ timers.forEach(clearTimeout); timers=[]; }
 function season(){ const d=new Date(), y=d.getFullYear(); return d.getMonth()>=6 ? `${y}-${String(y+1).slice(2)}` : `${y-1}-${String(y).slice(2)}`; }
-function ensureAudio(){ try{ if(!actx) actx=new (window.AudioContext||window.webkitAudioContext)(); if(actx.state==='suspended') actx.resume(); }catch{} }
+const VP_BASE='/dribble-dash/audio/';
+function vpOn(){ return S.vpack && S.vpack!=='device' && !!window.VoicePack; }
+function vpLoad(){ try{ if(vpOn()){ VoicePack.unlock(); VoicePack.load(VP_BASE,S.vpack); } }catch{} }
+function ensureAudio(){ vpLoad(); try{ if(!actx) actx=new (window.AudioContext||window.webkitAudioContext)(); if(actx.state==='suspended') actx.resume(); }catch{} }
 function beep(f=880,d=.14,v=.4){ if(!actx) return; const o=actx.createOscillator(), g=actx.createGain(), t=actx.currentTime;
   o.type='triangle'; o.frequency.value=f; g.gain.setValueAtTime(.0001,t); g.gain.exponentialRampToValueAtTime(v,t+.01); g.gain.exponentialRampToValueAtTime(.0001,t+d);
   o.connect(g).connect(actx.destination); o.start(t); o.stop(t+d+.02); }
 const sayGate={};
 function say(text,{key=null,gap=0,urgent=false}={}){
-  if(!S.voice || !('speechSynthesis' in window)) return;
+  if(!S.voice) return;
   const now=performance.now();
   if(key){ if(sayGate[key] && now-sayGate[key]<gap) return; sayGate[key]=now; }
+  if(vpOn()){ try{ if(VoicePack.play(text,VP_BASE,S.vpack,{interrupt:urgent})!==false) return; }catch{} }
+  if(!('speechSynthesis' in window)) return;
   try{ if(urgent) speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(text); u.rate=1.08; u.pitch=1.05; speechSynthesis.speak(u); }catch{}
 }
 function primeVoice(){ try{ if(S.voice && 'speechSynthesis' in window){ const u=new SpeechSynthesisUtterance(' '); u.volume=0; speechSynthesis.speak(u); } }catch{} }
@@ -507,6 +526,7 @@ function poseTrack(now){
   const k=body.at&&now-body.at<500?.5:1;
   body.hipY+= (hipY-body.hipY)*k; body.kneeY+=(kneeY-body.kneeY)*k; body.ankleY+=(ankleY-body.ankleY)*k;
   body.midX+=(midX-body.midX)*k; body.hipW+=(hipW-body.hipW)*k; body.at=now;
+  body.lr=Math.sign(L[23].x-L[24].x)||body.lr||1; // +1 = her left hip is at larger x in the camera image
   body.lm=L.map(p=>({x:p.x,y:p.y,v:p.visibility??1}));
   body.ankOK=ankVis>.35;
   // knee bend: hip-to-ankle height vs her tallest (standing) height, which decays slowly so moving around re-learns it
@@ -638,7 +658,7 @@ function status(obs,now){
 }
 
 /* ---------------- game logic ---------------- */
-function newRun(def,secs){ return {def,secs,reps:0,all:0,score:0,streak:0,best:0,mult:1,lastQ:0,lastSide:null,cross:0,hSum:0,hN:0,zones:{LOW:0,WAIST:0,HIGH:0},times:[],t0:0,elapsed:0,poseUsed:false,said10:false,saidHalf:false,kneeT:0,kneeBentT:0,kLast:0}; }
+function newRun(def,secs){ return {def,secs,reps:0,all:0,score:0,streak:0,best:0,mult:1,lastQ:0,lastSide:null,cross:0,hands:{L:0,R:0},lastHand:null,runHand:null,runN:0,calledHand:null,hSum:0,hN:0,zones:{LOW:0,WAIST:0,HIGH:0},times:[],t0:0,elapsed:0,poseUsed:false,said10:false,saidHalf:false,kneeT:0,kneeBentT:0,kLast:0}; }
 function zoneOf(h){ const kr=(body.ankleY-body.kneeY)/(body.ankleY-body.hipY); return h<=kr*1.15?'LOW':h<=1.15?'WAIST':'HIGH'; }
 const BEND_DEPTH=.07; // hips ~7% lower than standing = knees bent
 function stanceUpdate(now){
@@ -666,7 +686,17 @@ function onDribble(ev,now){
   if(zone) showZone(zone);
   let crossed=false;
   if(side!=null){ if(R.lastSide!=null&&side!==R.lastSide){ crossed=true; R.cross++; } R.lastSide=side; }
+  // which hand: ball on her left side of the body = left hand (MediaPipe labels hips by her own left/right, so this works on front or back camera)
+  let hand = side!=null ? (side*body.lr>0?'L':'R') : (bodyOK(now)?R.lastHand:null);
+  if(hand){
+    R.hands[hand]++; R.lastHand=hand; showHand(hand);
+    if(hand===R.runHand) R.runN++; else { R.runHand=hand; R.runN=1; }
+    const one = d.metric==='left'||d.metric==='right';
+    if(!one && d.metric!=='cross' && R.runN===3 && hand!==R.calledHand){ R.calledHand=hand; say(hand==='L'?'Left hand!':'Right hand!',{key:'hand',gap:2000}); }
+  }
   let q=true;
+  if((d.metric==='left'||d.metric==='right') && poseOn()){ const want=d.metric==='left'?'L':'R'; q = hand ? hand===want : true;
+    if(!q && R.runN>=2) say(want==='L'?'Wrong hand! Left hand!':'Wrong hand! Right hand!',{key:'wrong',gap:4000}); }
   if(d.metric==='low' && poseOn()) q = zone ? zone==='LOW' : true;
   if(d.metric==='cross' && poseOn()) q = crossed;
   if(q){
@@ -677,12 +707,15 @@ function onDribble(ev,now){
     pop('+'+m,m>1?'#5ff0a0':'#f6c623',ev.x,ev.apexY??prev?.y);
     if(d.kind==='target' && R.reps>=d.target) endSegment();
     else if(d.kind==='target' && d.target-R.reps===10) say('Ten more!',{key:'ten'});
+  } else if(d.metric==='left'||d.metric==='right'){
+    if(R.streak>0) pop('OTHER HAND!','#ff5a4f',ev.x,ev.apexY); R.streak=0; R.mult=1;
   } else if(d.metric==='low'){
     if(R.streak>0) pop('LOWER!','#ff5a4f',ev.x,ev.apexY);
     R.streak=0; R.mult=1; say('Get lower!',{key:'lower',gap:3500});
   }
   updateBoard();
 }
+function showHand(h){ $('hL').classList.toggle('lit',h==='L'); $('hR').classList.toggle('lit',h==='R'); }
 function showZone(z){ for(const k of ['LOW','WAIST','HIGH']) $('z'+k).classList.toggle('lit',k===z); clearTimeout(showZone.t); showZone.t=setTimeout(()=>{ for(const k of ['LOW','WAIST','HIGH']) $('z'+k).classList.remove('lit'); },900); }
 function clockText(){
   if(!R) return '';
@@ -724,7 +757,7 @@ function startRun(){
   if(S.mode==='color'&&!S.calib) return toast('Calibrate the ball first (⚙️)');
   if(S.mode==='ai'&&!ballDet) return toast(aiLoading?'AI is still loading — one sec':'AI tracker not loaded — check internet');
   const segs=buildSegs();
-  if(segs.some(s=>s.d&&DR[s.d].needsPose) && !poseOn()) toast('Body tracking is off — Low & Crossover will count every dribble');
+  if(segs.some(s=>s.d&&DR[s.d].needsPose) && !poseOn()) toast('Body tracking is off — Low, Crossover & hand drills will count every dribble');
   $('resOv').classList.add('hidden');
   W={segs,idx:-1,results:[],restEnd:0,name:S.sel==='workout'?WK().name:DR[S.sel].name};
   setGo('CANCEL','stop'); startRecorder(); nextSegment(true);
@@ -779,6 +812,7 @@ function finish(){
   const kT=sum(r=>r.kneeT), kB=sum(r=>r.kneeBentT);
   const reps=sum(r=>r.reps), all=sum(r=>r.all), score=sum(r=>r.score), secs=sum(r=>r.elapsed), cross=sum(r=>r.cross);
   const best=Math.max(...rs.map(r=>r.best)), hN=sum(r=>r.hN), low=sum(r=>r.zones.LOW);
+  const hL=sum(r=>r.hands.L), hR=sum(r=>r.hands.R);
   const rated=rs.filter(r=>r.rating!=null); const rating=rated.length?Math.round(rated.reduce((a,r)=>a+r.rating,0)/rated.length):null;
   const complete = isW ? rs.length===WK().segs.filter(s=>s.d).length && rs.every(r=>!r.early) : last.complete;
   // personal best
@@ -788,15 +822,21 @@ function finish(){
     better = pbVal>0 && (old==null || (last.def.kind==='target'&&!isW ? pbVal<old : pbVal>old));
     if(better){ pbs[key]=pbVal; store.set('pbs',pbs); }
   }
-  renderCard({isW,name:W.name,knee:kT>3?Math.round(kB/kT*100)+'%':'–',reps,all,score,secs,cross,best,low,hN,rating,complete,better,rs,last});
+  const card={isW,name:W.name,knee:kT>3?Math.round(kB/kT*100)+'%':'–',reps,all,score,secs,cross,best,low,hN,hL,hR,rating,complete,better,rs,last};
+  renderCard(card); lastCard=card;
   $('resOv').classList.remove('hidden'); $('replayBtn').classList.toggle('hidden',!recURL&&!(S.rec&&recorder));
   renderPB();
-  const lines=[];
+  const lines=[], clips=vpOn(); // ElevenLabs clips can't say arbitrary numbers, so that voice skips them (they're on the card)
   if(!complete) lines.push('Round over.');
   else{
     if(better) lines.push('New personal best!');
-    lines.push(isW?`Workout done. ${reps} reps, ${score} points.`: last.def.kind==='target'?`${last.elapsed.toFixed(1)} seconds.`:`${reps} ${last.def.metric==='cross'?'crossovers':'dribbles'}.`);
-    if(rating!=null) lines.push(`Rating ${rating}.`);
+    if(clips) lines.push(isW?'Workout done!':'Drill done!');
+    else{
+      lines.push(isW?`Workout done. ${reps} reps, ${score} points.`: last.def.kind==='target'?`${last.elapsed.toFixed(1)} seconds.`:`${reps} ${last.def.metric==='cross'?'crossovers':last.def.metric==='left'?'left hand dribbles':last.def.metric==='right'?'right hand dribbles':'dribbles'}.`);
+      if(rating!=null) lines.push(`Rating ${rating}.`);
+    }
+    const weak = hL+hR>=20 && !['left','right','cross'].includes(last.def.metric) ? (hL<(hL+hR)*.35?'L':hR<(hL+hR)*.35?'R':null) : null;
+    if(weak) lines.push(weak==='L'?'Work that left hand too!':'Work that right hand too!');
     lines.push(rating>=85?'Lets go Angels!':rating>=60?'Nice work!':'Keep grinding!');
   }
   say(lines.join(' '),{urgent:true});
@@ -809,7 +849,7 @@ function renderCard(o){
   let msg = !o.complete ? 'Stopped early — not saved as a best.' :
     o.isW ? `${o.reps} reps · ${o.score} points` :
     o.last.def.kind==='target' ? `${o.reps} dribbles in ${o.last.elapsed.toFixed(1)}s` :
-    `${o.reps} ${o.last.def.metric==='cross'?'crossovers':o.last.def.metric==='low'?'low dribbles':'dribbles'} · ${o.score} pts`;
+    `${o.reps} ${o.last.def.metric==='cross'?'crossovers':o.last.def.metric==='low'?'low dribbles':o.last.def.metric==='left'?'left-hand dribbles':o.last.def.metric==='right'?'right-hand dribbles':'dribbles'} · ${o.score} pts`;
   const segRows = o.isW ? `<div class="tc-segs">${o.rs.map(r=>`<div><span>${r.def.name}</span><b>${r.reps} · ${r.rating??'–'}</b></div>`).join('')}</div>` : '';
   $('tcard').innerHTML=`
     <div class="tc-head"><svg aria-hidden="true"><use href="#gaMark"/></svg><div><div class="a">ANGELS</div><div class="b">DRIBBLE DASH</div></div></div>
@@ -825,13 +865,37 @@ function renderCard(o){
       <div><span>KNEES BENT</span><b>${o.knee}</b></div>
       <div><span>LOW %</span><b>${pct}</b></div>
       <div><span>CROSSOVERS</span><b>${o.hN?o.cross:'–'}</b></div>
+      <div><span>LEFT HAND</span><b>${o.hL+o.hR?o.hL:'–'}</b></div>
+      <div><span>RIGHT HAND</span><b>${o.hL+o.hR?o.hR:'–'}</b></div>
     </div>
     ${segRows}
     <div class="tc-band">${esc(S.name)}<small>Angels · ${season()}</small></div>`;
 }
+let lastCard=null;
+function resultText(o){
+  const L=[`🏀 ${S.name} — Dribble Dash`, o.name];
+  if(!o.complete) L.push('(stopped early)');
+  L.push(o.isW ? `${o.reps} reps · ${o.score} pts` + (o.rating!=null?` · Rating ${o.rating}`:'') :
+    o.last.def.kind==='target' ? `${o.reps} dribbles in ${o.last.elapsed.toFixed(1)} sec` :
+    `${o.reps} ${o.last.def.metric==='cross'?'crossovers':'dribbles'} · ${o.score} pts` + (o.rating!=null?` · Rating ${o.rating}`:''));
+  if(o.isW) L.push(...o.rs.map(r=>`• ${r.def.name}: ${r.reps}`));
+  if(o.hL+o.hR) L.push(`Left hand ${o.hL} · Right hand ${o.hR}`);
+  const ex=[]; if(o.knee!=='–') ex.push(`Knees bent ${o.knee}`); ex.push(`Best streak ${o.best}`); L.push(ex.join(' · '));
+  if(o.better) L.push('🎉 NEW PERSONAL BEST!');
+  L.push('Go Angels! 😇');
+  return L.join('\n');
+}
+async function textParents(){
+  if(!lastCard) return;
+  const body=resultText(lastCard);
+  const nums=(S.phones||'').split(/[,;]+/).map(n=>n.replace(/[^\d+]/g,'')).filter(n=>n.replace(/\D/g,'').length>=7);
+  if(nums.length){ location.href = nums.length===1 ? `sms:${nums[0]}&body=${encodeURIComponent(body)}` : `sms:/open?addresses=${nums.join(',')}&body=${encodeURIComponent(body)}`; return; }
+  try{ if(navigator.share){ await navigator.share({text:body}); return; } }catch(e){ if(e.name==='AbortError') return; }
+  try{ await navigator.clipboard.writeText(body); toast('Copied — paste it in Messages'); }catch{ toast('Add parent numbers in ⚙️'); }
+}
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function cancelRun(){
-  clearTimers(); try{ speechSynthesis.cancel(); }catch{}
+  clearTimers(); try{ speechSynthesis.cancel(); }catch{} try{ VoicePack.stop(); }catch{}
   if(state==='running'&&R){ endSegment(true); return; }
   if(W&&W.results.length){ finish(); return; }
   state='idle'; $('cdOv').classList.add('hidden'); stopRecorder(true); setGo('START'); renderDrillInfo();
@@ -883,7 +947,8 @@ function renderDrillInfo(){
   if(S.sel==='workout'){ $('dName').textContent=WK().name; $('dDesc').textContent=WK().desc; $('timeLbl').textContent='TIME'; $('sTime').textContent=fmt(WK().segs.reduce((a,s)=>a+(s.secs||s.rest),0)); $('bigLbl').textContent='REPS'; }
   else{ const d=DR[S.sel]; $('dName').textContent=d.name; $('dDesc').textContent=d.desc;
     $('timeLbl').textContent=d.kind==='timed'?'LEFT':'TIME'; $('sTime').textContent=d.kind==='timed'?fmt(d.secs):d.kind==='target'?'0.0s':'0:00';
-    $('bigLbl').textContent=d.metric==='cross'?'CROSSOVERS':d.metric==='low'?'LOW DRIBBLES':'DRIBBLES'; }
+    $('bigLbl').textContent=d.metric==='cross'?'CROSSOVERS':d.metric==='low'?'LOW DRIBBLES':d.metric==='left'?'LEFT HAND':d.metric==='right'?'RIGHT HAND':'DRIBBLES'; }
+  showHand(null);
   $('big').textContent='0'; $('sScore').textContent='0'; $('sStreak').textContent='0'; $('sSpeed').textContent='–'; $('mult').textContent='×1'; $('mult').classList.remove('on');
   renderLevels(); renderPB();
 }
@@ -897,21 +962,23 @@ function renderSettings(){
   $('sens').value=S.sens; $('sensVal').textContent=S.sens;
   document.querySelectorAll('#camSeg button').forEach(b=>b.classList.toggle('on',b.dataset.f===S.facing));
   $('optKnee').checked=S.knee; $('optPose').checked=S.pose; $('optVoice').checked=S.voice; $('optRec').checked=S.rec; $('optDbg').checked=S.debug;
-  $('inName').value=S.name;
+  $('inName').value=S.name; $('inPhones').value=S.phones||'';
+  document.querySelectorAll('#vpSeg button').forEach(b=>b.classList.toggle('on',b.dataset.v===S.vpack));
 }
 const busy=()=>state==='running'||state==='countdown'||state==='rest'||state==='between';
 function openSheet(){ renderSettings(); $('sheet').classList.remove('hidden'); }
 function closeSheet(){
   S.name=($('inName').value.trim()||'Angel').slice(0,14);
-  store.set('name',S.name); renderPlayer(); $('sheet').classList.add('hidden');
+  store.set('name',S.name); S.phones=$('inPhones').value.trim(); store.set('phones',S.phones); renderPlayer(); $('sheet').classList.add('hidden');
 }
 
 /* ---------------- wire up ---------------- */
-$('camBtn').onclick=startCamera;
+$('camBtn').onclick=()=>{ ensureAudio(); startCamera(); };
 $('goBtn').onclick=goPressed;
 $('againBtn').onclick=()=>{ $('resOv').classList.add('hidden'); startRun(); };
 $('doneBtn').onclick=()=>{ $('resOv').classList.add('hidden'); state='idle'; renderDrillInfo(); };
 $('replayBtn').onclick=openReplay;
+$('textBtn').onclick=textParents;
 $('closeReplay').onclick=()=>{ $('replay').pause(); $('replaySheet').classList.add('hidden'); };
 $('saveVid').onclick=saveReplay;
 $('chips').onclick=e=>{ const b=e.target.closest('.chip'); if(!b) return; if(busy()) return toast('Finish the round first');
@@ -927,7 +994,10 @@ $('modeSeg').onclick=e=>{ const b=e.target.closest('button'); if(!b) return; if(
 $('calBtn').onclick=startCalib;
 $('sens').oninput=e=>{ S.sens=+e.target.value; store.set('sens',S.sens); $('sensVal').textContent=S.sens; };
 $('optPose').onchange=e=>{ S.pose=e.target.checked; store.set('pose',S.pose); poseAuto=true; slowSince=0; if(camOn&&S.pose) loadModels(); };
-$('optVoice').onchange=e=>{ S.voice=e.target.checked; store.set('voice',S.voice); if(S.voice){ primeVoice(); say('Coach is on!'); } };
+$('optVoice').onchange=e=>{ S.voice=e.target.checked; store.set('voice',S.voice); if(S.voice){ ensureAudio(); primeVoice(); setTimeout(()=>say('Coach is on!'),vpOn()?700:0); } };
+$('vpSeg').onclick=e=>{ const b=e.target.closest('button'); if(!b) return; S.vpack=b.dataset.v; store.set('vpack',S.vpack);
+  document.querySelectorAll('#vpSeg button').forEach(x=>x.classList.toggle('on',x.dataset.v===S.vpack)); vpLoad();
+  if(S.voice){ ensureAudio(); setTimeout(()=>say('Coach is on!',{urgent:true}),vpOn()?700:0); } };
 $('optKnee').onchange=e=>{ S.knee=e.target.checked; store.set('knee',S.knee); };
 $('optRec').onchange=e=>{ S.rec=e.target.checked; store.set('rec',S.rec); };
 $('optDbg').onchange=e=>{ S.debug=e.target.checked; store.set('debug',S.debug); };
@@ -935,7 +1005,7 @@ $('resetPB').onclick=()=>{ if(confirm('Erase all best scores?')){ pbs={}; store.
 
 renderPlayer(); renderDrillInfo();
 window.__dd={get state(){return state}, demoCard(){ // used for layout testing only
-  W={segs:WK().segs,idx:0,results:[],name:WK().name}; const mk=(k,reps)=>({...newRun(DR[k],20),reps,all:reps+3,score:reps+8,best:12,elapsed:20,hN:reps,zones:{LOW:Math.round(reps*.6),WAIST:3,HIGH:1},cross:k==='cross'?reps:4,rating:70+reps%25,complete:true});
+  W={segs:WK().segs,idx:0,results:[],name:WK().name}; const mk=(k,reps)=>({...newRun(DR[k],20),reps,all:reps+3,score:reps+8,best:12,elapsed:20,hN:reps,zones:{LOW:Math.round(reps*.6),WAIST:3,HIGH:1},cross:k==='cross'?reps:4,hands:{L:Math.round(reps*.4),R:reps-Math.round(reps*.4)},rating:70+reps%25,complete:true});
   W.results=[mk('pound',41),mk('low',33),mk('cross',15),mk('blitz30',72)]; state='running'; finish(); }};
 </script>
 </body>
