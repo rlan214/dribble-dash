@@ -292,6 +292,7 @@ const DR = {
   pound:  {name:'Pound Dribble', kind:'timed', secs:30, metric:'all',  par:2.3, desc:'Hard, fast dribbles with your strong hand. Pound it!', cue:'Pound dribble. Strong hand. Pound it hard!'},
   low:    {name:'Low Dribble',   kind:'timed', secs:30, metric:'low',  par:2.0, desc:'Keep it at your knees. Only low dribbles count.', cue:'Low dribble. Stay low, below your knees!', needsPose:true},
   cross:  {name:'Crossovers',    kind:'timed', secs:30, metric:'cross',par:0.9, desc:'Cross it hand to hand in front of you. Each switch counts.', cue:'Crossovers. Switch hands, quick and low!', needsPose:true},
+  wrap:   {name:'Around the Body',kind:'timed',secs:30,metric:'wrap', par:0.7, gap:3200, desc:'Circle the ball around your waist, hand to hand. Each full lap counts.', cue:'Around the body. Keep it moving, waist high!', needsPose:true},
   left:   {name:'Left Hand',     kind:'timed', secs:30, metric:'left', par:2.0, desc:'Left hand only. Only left-hand dribbles count.', cue:'Left hand only. Pound it!', needsPose:true},
   right:  {name:'Right Hand',    kind:'timed', secs:30, metric:'right',par:2.2, desc:'Right hand only. Only right-hand dribbles count.', cue:'Right hand only. Pound it!', needsPose:true},
   blitz30:{name:'30-Sec Blitz',  kind:'timed', secs:30, metric:'all',  par:2.8, desc:'Most dribbles in 30 seconds. Any hand.', cue:'Thirty second blitz. As fast as you can!'},
@@ -300,17 +301,17 @@ const DR = {
   free:   {name:'Free Dribble',  kind:'free', metric:'all', desc:'No clock. Practice anything and watch your stats.', cue:'Free dribble. Have fun!'}
 };
 const LEVELS = {
-  rookie:{label:'Rookie', desc:'Pound, low, crossovers, then a blitz. Short and sweet.',
-    segs:[{d:'pound',secs:20},{rest:10},{d:'low',secs:20},{rest:10},{d:'cross',secs:20},{rest:10},{d:'blitz30',secs:30}]},
-  varsity:{label:'Varsity', desc:'Longer drills plus a 60-second finisher.',
-    segs:[{d:'pound',secs:30},{rest:15},{d:'low',secs:30},{rest:15},{d:'cross',secs:30},{rest:15},{d:'blitz30',secs:30},{rest:15},{d:'blitz60',secs:60}]},
-  allstar:{label:'All-Star', desc:'Game-shape: longer sets, short rests, extra low + crossover rounds, 60-second finisher.',
-    segs:[{d:'pound',secs:40},{rest:10},{d:'low',secs:40},{rest:10},{d:'cross',secs:40},{rest:10},{d:'low',secs:30},{rest:10},{d:'cross',secs:30},{rest:10},{d:'blitz60',secs:60}]}
+  rookie:{label:'Rookie', desc:'Pound, low, crossovers, around the body, then a blitz.',
+    segs:[{d:'pound',secs:20},{rest:10},{d:'low',secs:20},{rest:10},{d:'cross',secs:20},{rest:10},{d:'wrap',secs:20},{rest:10},{d:'blitz30',secs:30}]},
+  varsity:{label:'Varsity', desc:'Longer drills, around the body, plus a 60-second finisher.',
+    segs:[{d:'pound',secs:30},{rest:15},{d:'low',secs:30},{rest:15},{d:'cross',secs:30},{rest:15},{d:'wrap',secs:30},{rest:15},{d:'blitz30',secs:30},{rest:15},{d:'blitz60',secs:60}]},
+  allstar:{label:'All-Star', desc:'Game-shape: longer sets, short rests, extra low + crossover rounds, around the body, 60-second finisher.',
+    segs:[{d:'pound',secs:40},{rest:10},{d:'low',secs:40},{rest:10},{d:'cross',secs:40},{rest:10},{d:'low',secs:30},{rest:10},{d:'cross',secs:30},{rest:10},{d:'wrap',secs:40},{rest:10},{d:'blitz60',secs:60}]}
 };
 const WK = () => { const L=LEVELS[S.level]||LEVELS.rookie; return {...L, name:'Angels Workout · '+L.label}; };
 const wkMins = l => Math.round(LEVELS[l].segs.reduce((a,x)=>a+(x.secs||x.rest),0)/30)/2;
 const pbKey = () => S.sel==='workout' ? 'workout-'+S.level : S.sel;
-const CHIPS = [['workout','⭐ Angels Workout'],['pound','Pound'],['low','Low'],['cross','Crossovers'],['left','Left Hand'],['right','Right Hand'],['blitz30','30s Blitz'],['blitz60','60s'],['race100','Race 100'],['free','Free']];
+const CHIPS = [['workout','⭐ Angels Workout'],['pound','Pound'],['low','Low'],['cross','Crossovers'],['wrap','Around Body'],['left','Left Hand'],['right','Right Hand'],['blitz30','30s Blitz'],['blitz60','60s'],['race100','Race 100'],['free','Free']];
 
 /* ---------------- storage ---------------- */
 const store = {
@@ -562,6 +563,31 @@ const bounce={
 };
 bounce.reset();
 
+/* ---------------- around-the-body (wrap) detector ---------------- */
+// No bounce here: the ball circles her waist. Each time it reaches the far side of her body (outside the hip,
+// between shoulders and knees) after last being on the other far side = half a lap; two halves = one lap.
+// Works whether the ball is seen passing in front or hidden behind her back.
+const wrap={
+  reset(){ this.side=null; this.halves=0; this.cx=.5; this.lastAt=0; },
+  feed(o,now){
+    if(!o) return false;
+    let rel, ok=true;
+    if(bodyOK(now)){
+      rel=(o.x-body.midX)/body.hipW;
+      const sh=body.lm? (body.lm[11].y+body.lm[12].y)/2 : body.hipY-(body.kneeY-body.hipY);
+      ok = o.y>sh-.05 && o.y<body.kneeY+.03;           // waist band: shoulders to knees
+    } else { this.cx=this.cx*.98+o.x*.02; rel=(o.x-this.cx)/.12; } // no body: use the ball's own average x
+    if(!ok) return false;
+    const side = rel>.8?1 : rel<-.8?-1 : null;
+    if(side==null || side===this.side) return false;
+    const first=this.side==null; this.side=side; if(first) return false;
+    if(now-this.lastAt>3500) this.halves=0; this.lastAt=now;
+    if(++this.halves>=2){ this.halves=0; return true; }
+    return false;
+  }
+};
+wrap.reset();
+
 /* ---------------- main loop ---------------- */
 function loop(now){
   if(!camOn) return;
@@ -577,7 +603,9 @@ function loop(now){
     const ev=bounce.feed(obs,now);
     if(obs){ prev=obs; prevAt=now; trail.push({x:obs.x,y:obs.y,t:now}); } else if(now-prevAt>500) prev=null;
     while(trail.length&&now-trail[0].t>350) trail.shift();
-    if(ev) onDribble(ev,now);
+    const wrapping = R && R.def.metric==='wrap';
+    if(ev && !wrapping) onDribble(ev,now); else if(ev) lastFlash=now;
+    if(wrapping && state==='running' && now>=R.ignoreUntil && wrap.feed(obs,now)) onLap(obs,now);
     stanceUpdate(now);
     perfGuard(now);
     draw(obs,vw,vh,now);
@@ -715,6 +743,15 @@ function onDribble(ev,now){
   }
   updateBoard();
 }
+function onLap(o,now){
+  lastFlash=now; R.all++; R.reps++; R.times.push(now); if(bodyOK(now)) R.poseUsed=true;
+  R.streak = now-R.lastQ<R.def.gap ? R.streak+1 : 1; R.lastQ=now;
+  const m=R.streak>=20?3:R.streak>=10?2:1;
+  if(m>R.mult){ beep(m===3?1320:1100,.18,.35); pop('×'+m,'#5ff0a0',null,.3,true); say(m===3?'Times three! On fire!':'Times two!',{key:'mult',gap:1500}); }
+  R.mult=m; R.score+=m; R.best=Math.max(R.best,R.streak);
+  pop('+'+m,m>1?'#5ff0a0':'#f6c623',o.x,o.y);
+  updateBoard();
+}
 function showHand(h){ $('hL').classList.toggle('lit',h==='L'); $('hR').classList.toggle('lit',h==='R'); }
 function showZone(z){ for(const k of ['LOW','WAIST','HIGH']) $('z'+k).classList.toggle('lit',k===z); clearTimeout(showZone.t); showZone.t=setTimeout(()=>{ for(const k of ['LOW','WAIST','HIGH']) $('z'+k).classList.remove('lit'); },900); }
 function clockText(){
@@ -726,7 +763,7 @@ function speedNow(now){ if(!R) return 0; const win=Math.min(3,Math.max(.5,R.elap
 function tick(now){
   if(state==='running'&&R){
     R.elapsed=(now-R.t0)/1000; const d=R.def;
-    if(R.streak&&now-R.lastQ>1700){ R.streak=0; R.mult=1; }
+    if(R.streak&&now-R.lastQ>(d.gap||1700)){ R.streak=0; R.mult=1; }
     if(d.kind==='timed'){
       const left=R.secs-R.elapsed;
       if(!R.said10&&R.secs>=20&&left<=10){ R.said10=true; say('Ten seconds!',{urgent:true}); }
@@ -757,7 +794,7 @@ function startRun(){
   if(S.mode==='color'&&!S.calib) return toast('Calibrate the ball first (⚙️)');
   if(S.mode==='ai'&&!ballDet) return toast(aiLoading?'AI is still loading — one sec':'AI tracker not loaded — check internet');
   const segs=buildSegs();
-  if(segs.some(s=>s.d&&DR[s.d].needsPose) && !poseOn()) toast('Body tracking is off — Low, Crossover & hand drills will count every dribble');
+  if(segs.some(s=>s.d&&DR[s.d].needsPose) && !poseOn()) toast('Body tracking is off — Low, Crossover, Around-the-Body & hand drills are less accurate');
   $('resOv').classList.add('hidden');
   W={segs,idx:-1,results:[],restEnd:0,name:S.sel==='workout'?WK().name:DR[S.sel].name};
   setGo('CANCEL','stop'); startRecorder(); nextSegment(true);
@@ -771,7 +808,7 @@ function nextSegment(first=false){
     $('cdNum').textContent=seg.rest; say('Rest. Next up, '+(nxt?DR[nxt.d].name:'')+'.');
     return;
   }
-  const d=DR[seg.d]; R=newRun(d,seg.secs); state='countdown';
+  const d=DR[seg.d]; R=newRun(d,seg.secs); wrap.reset(); state='countdown';
   if(S.sel==='workout') $('dName').textContent=WK().label+' · '+d.name; else renderDrillInfo();
   updateBoard();
   const lead=first?'':'';
@@ -832,7 +869,7 @@ function finish(){
     if(better) lines.push('New personal best!');
     if(clips) lines.push(isW?'Workout done!':'Drill done!');
     else{
-      lines.push(isW?`Workout done. ${reps} reps, ${score} points.`: last.def.kind==='target'?`${last.elapsed.toFixed(1)} seconds.`:`${reps} ${last.def.metric==='cross'?'crossovers':last.def.metric==='left'?'left hand dribbles':last.def.metric==='right'?'right hand dribbles':'dribbles'}.`);
+      lines.push(isW?`Workout done. ${reps} reps, ${score} points.`: last.def.kind==='target'?`${last.elapsed.toFixed(1)} seconds.`:`${reps} ${last.def.metric==='cross'?'crossovers':last.def.metric==='wrap'?'laps around the body':last.def.metric==='left'?'left hand dribbles':last.def.metric==='right'?'right hand dribbles':'dribbles'}.`);
       if(rating!=null) lines.push(`Rating ${rating}.`);
     }
     const weak = hL+hR>=20 && !['left','right','cross'].includes(last.def.metric) ? (hL<(hL+hR)*.35?'L':hR<(hL+hR)*.35?'R':null) : null;
@@ -849,7 +886,7 @@ function renderCard(o){
   let msg = !o.complete ? 'Stopped early — not saved as a best.' :
     o.isW ? `${o.reps} reps · ${o.score} points` :
     o.last.def.kind==='target' ? `${o.reps} dribbles in ${o.last.elapsed.toFixed(1)}s` :
-    `${o.reps} ${o.last.def.metric==='cross'?'crossovers':o.last.def.metric==='low'?'low dribbles':o.last.def.metric==='left'?'left-hand dribbles':o.last.def.metric==='right'?'right-hand dribbles':'dribbles'} · ${o.score} pts`;
+    `${o.reps} ${o.last.def.metric==='cross'?'crossovers':o.last.def.metric==='wrap'?'laps':o.last.def.metric==='low'?'low dribbles':o.last.def.metric==='left'?'left-hand dribbles':o.last.def.metric==='right'?'right-hand dribbles':'dribbles'} · ${o.score} pts`;
   const segRows = o.isW ? `<div class="tc-segs">${o.rs.map(r=>`<div><span>${r.def.name}</span><b>${r.reps} · ${r.rating??'–'}</b></div>`).join('')}</div>` : '';
   $('tcard').innerHTML=`
     <div class="tc-head"><svg aria-hidden="true"><use href="#gaMark"/></svg><div><div class="a">ANGELS</div><div class="b">DRIBBLE DASH</div></div></div>
@@ -877,7 +914,7 @@ function resultText(o){
   if(!o.complete) L.push('(stopped early)');
   L.push(o.isW ? `${o.reps} reps · ${o.score} pts` + (o.rating!=null?` · Rating ${o.rating}`:'') :
     o.last.def.kind==='target' ? `${o.reps} dribbles in ${o.last.elapsed.toFixed(1)} sec` :
-    `${o.reps} ${o.last.def.metric==='cross'?'crossovers':'dribbles'} · ${o.score} pts` + (o.rating!=null?` · Rating ${o.rating}`:''));
+    `${o.reps} ${o.last.def.metric==='cross'?'crossovers':o.last.def.metric==='wrap'?'laps around the body':'dribbles'} · ${o.score} pts` + (o.rating!=null?` · Rating ${o.rating}`:''));
   if(o.isW) L.push(...o.rs.map(r=>`• ${r.def.name}: ${r.reps}`));
   if(o.hL+o.hR) L.push(`Left hand ${o.hL} · Right hand ${o.hR}`);
   const ex=[]; if(o.knee!=='–') ex.push(`Knees bent ${o.knee}`); ex.push(`Best streak ${o.best}`); L.push(ex.join(' · '));
@@ -947,7 +984,7 @@ function renderDrillInfo(){
   if(S.sel==='workout'){ $('dName').textContent=WK().name; $('dDesc').textContent=WK().desc; $('timeLbl').textContent='TIME'; $('sTime').textContent=fmt(WK().segs.reduce((a,s)=>a+(s.secs||s.rest),0)); $('bigLbl').textContent='REPS'; }
   else{ const d=DR[S.sel]; $('dName').textContent=d.name; $('dDesc').textContent=d.desc;
     $('timeLbl').textContent=d.kind==='timed'?'LEFT':'TIME'; $('sTime').textContent=d.kind==='timed'?fmt(d.secs):d.kind==='target'?'0.0s':'0:00';
-    $('bigLbl').textContent=d.metric==='cross'?'CROSSOVERS':d.metric==='low'?'LOW DRIBBLES':d.metric==='left'?'LEFT HAND':d.metric==='right'?'RIGHT HAND':'DRIBBLES'; }
+    $('bigLbl').textContent=d.metric==='cross'?'CROSSOVERS':d.metric==='wrap'?'LAPS':d.metric==='low'?'LOW DRIBBLES':d.metric==='left'?'LEFT HAND':d.metric==='right'?'RIGHT HAND':'DRIBBLES'; }
   showHand(null);
   $('big').textContent='0'; $('sScore').textContent='0'; $('sStreak').textContent='0'; $('sSpeed').textContent='–'; $('mult').textContent='×1'; $('mult').classList.remove('on');
   renderLevels(); renderPB();
