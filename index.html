@@ -149,6 +149,15 @@ main{flex:1;display:grid;gap:14px;padding-bottom:16px;grid-template-columns:1fr}
 .segc.lvl{grid-template-columns:repeat(3,1fr);background:rgba(0,0,0,.25)}
 .segc.lvl button{font-size:16px;line-height:1.05;padding:8px 2px}.segc.lvl small{display:block;font-size:13px;font-weight:600;opacity:.8}
 .segc button.on{background:var(--gold);color:var(--deep)}
+.plan{display:grid;gap:6px;margin-top:6px}
+.plan .pw{display:grid;grid-template-columns:88px repeat(3,1fr);gap:6px;align-items:stretch}
+.plan .pw span{font-weight:800;font-size:15px;line-height:1.1;align-self:center}.plan .pw span small{display:block;font-weight:600;font-size:12px;opacity:.75}
+.plan button{background:rgba(0,0,0,.25);border:1px solid var(--line);border-radius:10px;padding:7px 2px;font-size:15px;font-weight:800;line-height:1.05}
+.plan button small{display:block;font-size:12px;font-weight:600;opacity:.75}
+.plan button.done{background:#1f6b45;border-color:#5ff0a0}
+.plan button.next{border-color:var(--gold)}
+.plan button.on{background:var(--gold);color:var(--deep);border-color:var(--gold)}
+.plan .pnote{font-size:13px;opacity:.75;text-align:center}
 .hint{color:var(--muted);font-size:16px;line-height:1.3}
 .sec{background:var(--deep);border:1px solid var(--line);border-radius:12px;padding:12px;font-size:18px;font-weight:700}
 .sec.danger{color:#ff9b94}
@@ -213,6 +222,7 @@ video#replay{width:100%;max-height:60vh;border-radius:12px;background:#000}
   <section class="board">
     <div class="dname" id="dName"></div>
     <div class="ddesc" id="dDesc"></div>
+    <div class="plan hidden" id="planGrid"></div>
     <div class="segc lvl hidden" id="lvlSeg"><button data-l="rookie"></button><button data-l="varsity"></button><button data-l="allstar"></button></div>
     <div class="bigrow">
       <div><div class="biglbl" id="bigLbl">DRIBBLES</div><div class="big" id="big">0</div></div>
@@ -308,10 +318,43 @@ const LEVELS = {
   allstar:{label:'All-Star', desc:'Game-shape: longer sets, short rests, extra low + crossover rounds, around the body, 60-second finisher.',
     segs:[{d:'pound',secs:40},{rest:10},{d:'low',secs:40},{rest:10},{d:'cross',secs:40},{rest:10},{d:'low',secs:30},{rest:10},{d:'cross',secs:30},{rest:10},{d:'wrap',secs:40},{rest:10},{d:'blitz60',secs:60}]}
 };
-const WK = () => { const L=LEVELS[S.level]||LEVELS.rookie; return {...L, name:'Angels Workout · '+L.label}; };
+/* 4-week plan: 12 sessions (3 a week), ~10 min each, easy -> game speed. Only drills the camera can count. */
+const mkS=(drills,secs,rest)=>{ const o=[]; drills.forEach((d,i)=>{ if(i) o.push({rest}); const [k,t]=Array.isArray(d)?d:[d,secs]; o.push({d:k,secs:t}); }); return o; };
+const PLAN_WEEKS=[
+  {name:'Control',      desc:'Week 1 — own the ball. Strong hand, weak hand, low, and around the body.'},
+  {name:'Both Hands',   desc:'Week 2 — add crossovers and make the weak hand work.'},
+  {name:'Speed',        desc:'Week 3 — longer sets, shorter rests, faster hands.'},
+  {name:'Game Speed',   desc:'Week 4 — game-pace sets and big finishers.'}
+];
+const PLAN=[
+  // week 1: 35s sets, 20s rest
+  mkS(['pound','right','left','low','wrap','pound','left','low','wrap'],35,20),
+  mkS(['right','left','pound','low','wrap','right','left','low','wrap'],35,20),
+  mkS(['pound','low','wrap','right','left','low','wrap','left',['blitz30',30]],35,20),
+  // week 2: 40s sets, 20s rest, crossovers come in
+  mkS(['pound','left','right','cross','low','wrap','cross','left',['blitz30',30]],40,20),
+  mkS(['left','right','cross','low','cross','wrap','left','cross',['blitz30',30]],40,20),
+  mkS(['pound','cross','left','right','low','cross','wrap','left',['blitz30',30]],40,20),
+  // week 3: 45s sets, 15s rest
+  mkS(['pound','cross','left','right','low','cross','wrap','left',['blitz30',30],['blitz30',30]],45,15),
+  mkS(['left','cross','right','low','cross','wrap','left','cross',['blitz60',60]],45,15),
+  mkS(['pound','cross','low','left','cross','wrap','right','cross',['blitz30',30],['blitz60',60]],45,15),
+  // week 4: 50s sets, 15s rest, game-speed finishers
+  mkS(['pound','cross','left','low','cross','wrap','right','cross',['blitz60',60]],50,15),
+  mkS(['cross','left','low','cross','wrap','right','cross',['blitz30',30],['race100',0]],50,15),
+  mkS(['pound','cross','left','right','low','cross','wrap','cross',['blitz60',60],['race100',0]],50,15)
+];
+const planWeek=i=>Math.floor(i/3), planDay=i=>i%3+1;
+const planNext=()=>{ for(let i=0;i<PLAN.length;i++) if(!planDone[i]) return i; return PLAN.length-1; };
+const segSecs=segs=>segs.reduce((a,x)=>a+(x.rest||(x.d==='race100'?40:x.secs)),0);
+const WK = () => {
+  if(S.sel==='plan'){ const i=S.planIdx, w=PLAN_WEEKS[planWeek(i)];
+    return {label:`Wk ${planWeek(i)+1} · Day ${planDay(i)}`, name:`4-Week Plan · Week ${planWeek(i)+1} Day ${planDay(i)}`, desc:w.name+' — '+w.desc.replace(/^Week \d+ — /,''), segs:PLAN[i]}; }
+  const L=LEVELS[S.level]||LEVELS.rookie; return {...L, name:'Angels Workout · '+L.label}; };
+const isProg = () => S.sel==='workout' || S.sel==='plan';
 const wkMins = l => Math.round(LEVELS[l].segs.reduce((a,x)=>a+(x.secs||x.rest),0)/30)/2;
-const pbKey = () => S.sel==='workout' ? 'workout-'+S.level : S.sel;
-const CHIPS = [['workout','⭐ Angels Workout'],['pound','Pound'],['low','Low'],['cross','Crossovers'],['wrap','Around Body'],['left','Left Hand'],['right','Right Hand'],['blitz30','30s Blitz'],['blitz60','60s'],['race100','Race 100'],['free','Free']];
+const pbKey = () => S.sel==='workout' ? 'workout-'+S.level : S.sel==='plan' ? 'plan-'+S.planIdx : S.sel;
+const CHIPS = [['workout','⭐ Angels Workout'],['plan','📅 4-Week Plan'],['pound','Pound'],['low','Low'],['cross','Crossovers'],['wrap','Around Body'],['left','Left Hand'],['right','Right Hand'],['blitz30','30s Blitz'],['blitz60','60s'],['race100','Race 100'],['free','Free']];
 
 /* ---------------- storage ---------------- */
 const store = {
@@ -321,9 +364,11 @@ const store = {
 const S = {
   mode:store.get('mode','ai'), sens:store.get('sens',5), calib:store.get('calib',null),
   pose:store.get('pose',true), knee:store.get('knee',true), voice:store.get('voice',true), rec:store.get('rec',true), debug:store.get('debug',false), facing:store.get('facing','user'),
-  vpack:store.get('vpack','lily'), phones:store.get('phones',''), sel:store.get('sel','workout'), level:store.get('level','rookie'), name:store.get('name','Kryslana')
+  vpack:store.get('vpack','lily'), phones:store.get('phones',''), sel:store.get('sel','workout'), planIdx:null, level:store.get('level','rookie'), name:store.get('name','Kryslana')
 };
 let pbs = store.get('pbs',{});
+let planDone=store.get('planDone',{}); // { "0": "2026-11-17", ... }
+S.planIdx = store.get('planIdx',null) ?? planNext();
 
 /* ---------------- elements / canvases ---------------- */
 const video=$('cam'), view=$('view'), vctx=view.getContext('2d');
@@ -786,8 +831,8 @@ function updateBoard(now=performance.now()){
 }
 
 /* ---------------- flow ---------------- */
-function selDef(){ return S.sel==='workout'?null:DR[S.sel]; }
-function buildSegs(){ if(S.sel==='workout') return WK().segs.map(s=>({...s})); const d=DR[S.sel]; return [{d:S.sel,secs:d.secs}]; }
+function selDef(){ return isProg()?null:DR[S.sel]; }
+function buildSegs(){ if(isProg()) return WK().segs.map(s=>({...s})); const d=DR[S.sel]; return [{d:S.sel,secs:d.secs}]; }
 function startRun(){
   ensureAudio(); primeVoice();
   if(!camOn) return toast('Turn on the camera first');
@@ -796,7 +841,7 @@ function startRun(){
   const segs=buildSegs();
   if(segs.some(s=>s.d&&DR[s.d].needsPose) && !poseOn()) toast('Body tracking is off — Low, Crossover, Around-the-Body & hand drills are less accurate');
   $('resOv').classList.add('hidden');
-  W={segs,idx:-1,results:[],restEnd:0,name:S.sel==='workout'?WK().name:DR[S.sel].name};
+  W={segs,idx:-1,results:[],restEnd:0,name:isProg()?WK().name:DR[S.sel].name};
   setGo('CANCEL','stop'); startRecorder(); nextSegment(true);
 }
 function nextSegment(first=false){
@@ -809,10 +854,10 @@ function nextSegment(first=false){
     return;
   }
   const d=DR[seg.d]; R=newRun(d,seg.secs); wrap.reset(); state='countdown';
-  if(S.sel==='workout') $('dName').textContent=WK().label+' · '+d.name; else renderDrillInfo();
+  if(isProg()) $('dName').textContent=WK().label+' · '+d.name; else renderDrillInfo();
   updateBoard();
   const lead=first?'':'';
-  showCd(d.name,d.desc,'', S.sel==='workout'?`DRILL ${W.segs.slice(0,W.idx+1).filter(s=>s.d).length} OF ${W.segs.filter(s=>s.d).length}`:lead);
+  showCd(d.name,d.desc,'', isProg()?`DRILL ${W.segs.slice(0,W.idx+1).filter(s=>s.d).length} OF ${W.segs.filter(s=>s.d).length}`:lead);
   say((first&&S.knee&&poseOn()?'Stand tall. ':'')+d.cue,{urgent:true});
   if(first&&S.knee&&poseOn()) $('cdNext').textContent='STAND TALL · GET LOW ON GO';
   const gap=first?2600:2200;
@@ -844,7 +889,7 @@ function finish(){
   clearTimers(); state='done'; $('cdOv').classList.add('hidden'); stopRecorder();
   setGo('START'); if(R&&R.def.kind==='timed') $('sTime').textContent='0:00';
   const rs=W.results; if(!rs.length){ state='idle'; return; }
-  const key=pbKey(), isW=S.sel==='workout', last=rs[rs.length-1];
+  const key=pbKey(), isW=isProg(), last=rs[rs.length-1];
   const sum=f=>rs.reduce((a,r)=>a+f(r),0);
   const kT=sum(r=>r.kneeT), kB=sum(r=>r.kneeBentT);
   const reps=sum(r=>r.reps), all=sum(r=>r.all), score=sum(r=>r.score), secs=sum(r=>r.elapsed), cross=sum(r=>r.cross);
@@ -859,7 +904,13 @@ function finish(){
     better = pbVal>0 && (old==null || (last.def.kind==='target'&&!isW ? pbVal<old : pbVal>old));
     if(better){ pbs[key]=pbVal; store.set('pbs',pbs); }
   }
-  const card={isW,name:W.name,knee:kT>3?Math.round(kB/kT*100)+'%':'–',reps,all,score,secs,cross,best,low,hN,hL,hR,rating,complete,better,rs,last};
+  let planMsg='';
+  if(complete && S.sel==='plan'){
+    const fresh=!planDone[S.planIdx]; planDone[S.planIdx]=new Date().toISOString().slice(0,10); store.set('planDone',planDone);
+    if(fresh){ const n=Object.keys(planDone).length; planMsg = n>=PLAN.length ? '🏆 4-week plan complete!' : `Session ${n} of ${PLAN.length} done`;
+      S.planIdx=planNext(); store.set('planIdx',S.planIdx); }
+  }
+  const card={planMsg,isW,name:W.name,knee:kT>3?Math.round(kB/kT*100)+'%':'–',reps,all,score,secs,cross,best,low,hN,hL,hR,rating,complete,better,rs,last};
   renderCard(card); lastCard=card;
   $('resOv').classList.remove('hidden'); $('replayBtn').classList.toggle('hidden',!recURL&&!(S.rec&&recorder));
   renderPB();
@@ -905,6 +956,7 @@ function renderCard(o){
       <div><span>LEFT HAND</span><b>${o.hL+o.hR?o.hL:'–'}</b></div>
       <div><span>RIGHT HAND</span><b>${o.hL+o.hR?o.hR:'–'}</b></div>
     </div>
+    ${o.planMsg?`<div class="tc-best">${o.planMsg}</div>`:''}
     ${segRows}
     <div class="tc-band">${esc(S.name)}<small>Angels · ${season()}</small></div>`;
 }
@@ -918,6 +970,7 @@ function resultText(o){
   if(o.isW) L.push(...o.rs.map(r=>`• ${r.def.name}: ${r.reps}`));
   if(o.hL+o.hR) L.push(`Left hand ${o.hL} · Right hand ${o.hR}`);
   const ex=[]; if(o.knee!=='–') ex.push(`Knees bent ${o.knee}`); ex.push(`Best streak ${o.best}`); L.push(ex.join(' · '));
+  if(o.planMsg) L.push(o.planMsg);
   if(o.better) L.push('🎉 NEW PERSONAL BEST!');
   L.push('Go Angels! 😇');
   return L.join('\n');
@@ -976,12 +1029,17 @@ async function saveReplay(){
 /* ---------------- UI render ---------------- */
 function renderChips(){ $('chips').innerHTML=CHIPS.map(([id,label])=>`<button class="chip${id===S.sel?' on':''}${id==='workout'?' star':''}" data-id="${id}">${label}</button>`).join(''); }
 function pbText(){ const v=pbs[pbKey()]; if(v==null) return '—'; return S.sel==='race100'?v.toFixed(1)+' sec':v+' pts'; }
-function renderLevels(){ const on=S.sel==='workout'; $('lvlSeg').classList.toggle('hidden',!on); if(!on) return;
+function renderPlan(){ const on=S.sel==='plan'; $('planGrid').classList.toggle('hidden',!on); if(!on) return;
+  const nx=planNext();
+  $('planGrid').innerHTML=PLAN_WEEKS.map((w,wi)=>`<div class="pw"><span>WK ${wi+1}<small>${w.name}</small></span>${[0,1,2].map(d=>{ const i=wi*3+d;
+    return `<button data-p="${i}" class="${i===S.planIdx?'on ':''}${planDone[i]?'done ':''}${i===nx&&!planDone[i]?'next':''}">${planDone[i]?'✓':'Day '+(d+1)}<small>${Math.round(segSecs(PLAN[i])/60)} min</small></button>`; }).join('')}</div>`).join('')
+    + `<div class="pnote">${Object.keys(planDone).length} of ${PLAN.length} sessions done · 3 a week, skip a day between</div>`; }
+function renderLevels(){ renderPlan(); const on=S.sel==='workout'; $('lvlSeg').classList.toggle('hidden',!on); if(!on) return;
   document.querySelectorAll('#lvlSeg button').forEach(b=>{ const l=b.dataset.l; b.innerHTML=`${LEVELS[l].label.toUpperCase()}<small>${wkMins(l)} min</small>`; b.classList.toggle('on',l===S.level); }); }
 function renderPB(){ $('pb').textContent=pbText(); }
 function renderDrillInfo(){
   renderChips();
-  if(S.sel==='workout'){ $('dName').textContent=WK().name; $('dDesc').textContent=WK().desc; $('timeLbl').textContent='TIME'; $('sTime').textContent=fmt(WK().segs.reduce((a,s)=>a+(s.secs||s.rest),0)); $('bigLbl').textContent='REPS'; }
+  if(isProg()){ $('dName').textContent=WK().name; $('dDesc').textContent=WK().desc; $('timeLbl').textContent='TIME'; $('sTime').textContent=fmt(segSecs(WK().segs)); $('bigLbl').textContent='REPS'; }
   else{ const d=DR[S.sel]; $('dName').textContent=d.name; $('dDesc').textContent=d.desc;
     $('timeLbl').textContent=d.kind==='timed'?'LEFT':'TIME'; $('sTime').textContent=d.kind==='timed'?fmt(d.secs):d.kind==='target'?'0.0s':'0:00';
     $('bigLbl').textContent=d.metric==='cross'?'CROSSOVERS':d.metric==='wrap'?'LAPS':d.metric==='low'?'LOW DRIBBLES':d.metric==='left'?'LEFT HAND':d.metric==='right'?'RIGHT HAND':'DRIBBLES'; }
@@ -1020,6 +1078,7 @@ $('closeReplay').onclick=()=>{ $('replay').pause(); $('replaySheet').classList.a
 $('saveVid').onclick=saveReplay;
 $('chips').onclick=e=>{ const b=e.target.closest('.chip'); if(!b) return; if(busy()) return toast('Finish the round first');
   S.sel=b.dataset.id; store.set('sel',S.sel); state='idle'; $('resOv').classList.add('hidden'); renderDrillInfo(); };
+$('planGrid').onclick=e=>{ const b=e.target.closest('button[data-p]'); if(!b) return; if(busy()) return toast('Finish the round first'); S.planIdx=+b.dataset.p; store.set('planIdx',S.planIdx); state='idle'; $('resOv').classList.add('hidden'); renderDrillInfo(); };
 $('lvlSeg').onclick=e=>{ const b=e.target.closest('button'); if(!b) return; if(busy()) return toast('Finish the round first'); S.level=b.dataset.l; store.set('level',S.level); state='idle'; renderDrillInfo(); };
 $('camSeg').onclick=e=>{ const b=e.target.closest('button'); if(b) switchCamera(b.dataset.f); };
 $('flipBtn').onclick=()=>switchCamera(S.facing==='user'?'environment':'user');
