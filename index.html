@@ -613,11 +613,13 @@ const bounce={
 bounce.reset();
 
 /* ---------------- around-the-body (wrap) detector ---------------- */
-// No bounce here: the ball circles her waist. Each time it reaches the far side of her body (outside the hip,
-// between shoulders and knees) after last being on the other far side = half a lap; two halves = one lap.
-// Works whether the ball is seen passing in front or hidden behind her back.
+// No bounce here: the ball circles her waist. A half lap = the ball goes from one far side of her body
+// (outside the hip, between shoulders and knees) to the other far side.
+// Anti-cheat: a real lap has one half IN FRONT (we see the ball cross her middle) and one half BEHIND HER BACK
+// (the ball vanishes and pops out the other side). Just swinging the ball left-right in front = every half is
+// "seen", so it never counts. A lap needs one seen half + one hidden half, back to back.
 const wrap={
-  reset(){ this.side=null; this.halves=0; this.cx=.5; this.lastAt=0; },
+  reset(){ this.side=null; this.prevSeen=null; this.mid=false; this.cx=.5; this.lastAt=0; this.swings=0; },
   feed(o,now){
     if(!o) return false;
     let rel, ok=true;
@@ -627,11 +629,15 @@ const wrap={
       ok = o.y>sh-.05 && o.y<body.kneeY+.03;           // waist band: shoulders to knees
     } else { this.cx=this.cx*.98+o.x*.02; rel=(o.x-this.cx)/.12; } // no body: use the ball's own average x
     if(!ok) return false;
+    if(this.side!=null && Math.abs(rel)<.5) this.mid=true; // ball seen crossing in front of her
     const side = rel>.8?1 : rel<-.8?-1 : null;
     if(side==null || side===this.side) return false;
-    const first=this.side==null; this.side=side; if(first) return false;
-    if(now-this.lastAt>3500) this.halves=0; this.lastAt=now;
-    if(++this.halves>=2){ this.halves=0; return true; }
+    const first=this.side==null; this.side=side; const seen=this.mid; this.mid=false;
+    if(first) return false;
+    if(now-this.lastAt>3500){ this.prevSeen=null; this.swings=0; } this.lastAt=now;
+    if(this.prevSeen!=null && this.prevSeen!==seen){ this.prevSeen=null; this.swings=0; return true; }
+    if(this.prevSeen===true && seen===true && ++this.swings>=2) say('All the way around your back!',{key:'wrapcheat',gap:5000});
+    this.prevSeen=seen;
     return false;
   }
 };
